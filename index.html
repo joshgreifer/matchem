@@ -6,7 +6,7 @@
     <meta name="viewport"
           content="width=device-width, viewport-fit=cover">
     <title>Matchem</title>
-    <style>
+    <style id="main-style">
         :root {
             /*  Globally used vars */
             --backgound-edge-color: #616161;
@@ -14,6 +14,7 @@
             --game-background-color: #000000;
             --tile-background-color: #ffffff;
             --text-color: #ffffff;
+            --dialog-background-color: #025771;
             --TRANSITION_TIME: 86400s;
 
         }
@@ -21,6 +22,8 @@
             /*border: 1px solid var(--backgound-edge-color);*/
         }
         html, body {
+            font-family: moody-adolescent-regular,sans-serif;
+
             margin: 0;
             padding: 0;
             /*height: 100%;*/
@@ -29,16 +32,78 @@
             color: var(--text-color);
             background-color: var(--game-background-color);
         }
-
-        @keyframes pulse {
-            0% { opacity: 1; }
-            16% { opacity: .5; }
-            32% { opacity: 1; }
-            48% { opacity: .5; }
-            64% { opacity: 1; }
-            80% { opacity: .5; }
-            96% { opacity: 1; }
+/* Button styles */
+        button {
+            background-color: #007bff;      /* your brand color */
+            color: white;                   /* text color */
+            border: none;                   /* remove default border */
+            padding: 0.5rem 1rem;           /* space inside button */
+            font-size: 1rem;                /* control text size */
+            border-radius: 4px;             /* rounded corners */
+            cursor: pointer;                /* pointer on hover */
         }
+        button:hover {
+            background-color: #0056b3;      /* darker on hover */
+        }
+        button:active {
+            transform: scale(0.98);         /* slight press effect */
+        }
+        button:disabled {
+            opacity: 0.5;                   /* indicate disabled state */
+            cursor: not-allowed;
+        }
+
+        /* Modal Dialog CSS */
+        /* 1) Base hidden state */
+        .modal {
+            display: none;                /* hidden by default */
+            position: fixed;              /* relative to viewport */
+            inset: 0;                     /* top:0; right:0; bottom:0; left:0; */
+            z-index: 9999;                /* on top of everything else */
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5); /* 50% black */
+        }
+
+        /* 2) When active, switch to grid to center dialog */
+        .modal.active {
+
+            display: grid;                /* establish grid for centering */
+            place-items: center;          /* center children both axes */
+        }
+
+
+        .modal__content {
+            border-radius: 15px;
+            filter: drop-shadow(4px 4px 4px #000000);
+
+            display: grid;                /* establish grid for centering */
+            place-items: center;          /* center children both axes */
+            width: 70vw;
+            height: 42vw;
+            background: linear-gradient(rgba(2, 87, 113, 0.60), rgba(0, 34, 48, 0.60));
+
+            color: var(--text-color);
+            font-size: 18px;
+        }
+        /*
+        !!IMPORTANT!!
+        This increasing-pulse keyframes CSS rule must remain commented-out!
+        It's just shown here for reference.
+        An "increasing-pulse" rule is inserted and modified dynamically in the JavaScript code,
+        which also maintains a handle to its index in the stylesheet for quick access to it.
+
+                @keyframes increasing-pulse {
+                    0% { opacity: 1; }
+                    16% { opacity: .5; }
+                    32% { opacity: 1; }
+                    48% { opacity: .5; }
+                    64% { opacity: 1; }
+                    80% { opacity: .5; }
+                    96% { opacity: 1; }
+                }
+
+         */
         @keyframes fade-in {
             from { opacity: 0.2; }
             to { opacity: 1; }
@@ -86,7 +151,6 @@
             place-items: stretch;
         }
         div#controls {
-            font-family: moody-adolescent-regular,sans-serif;
             justify-content: normal;
             display: grid;
             grid-template-rows: 10px 1fr 1fr;
@@ -110,15 +174,16 @@
         }
 
 
-
-
         div#timer-bar {
             grid-area: timer-bar;
+            background: linear-gradient(135deg, #ff0000 0%, #ff0000 10%, #0091c3 30%, #0091c3 90%, #00ff00 95%, #00ff00 100%);
+
         }
         .timer-fill {
             width: 100%;
             height: 100%;
-            background-color: #2196F3; /* Blue color */
+            background-color: var(--game-background-color);
+
         }
         .timer-fill.animate {
             animation: drain var(--TRANSITION_TIME) linear forwards;
@@ -160,7 +225,6 @@
         div.tile:hover {
             /*background-color: #ecdc74;*/
             cursor: grabbing;
-
         }
 
         div.tile img  {
@@ -215,10 +279,16 @@
         <div id="instructions"></div>
 
     </div>
-
-
-    <!--    <button onclick="addMorePairs=!addMorePairs">Toggle Timer</button>-->
 </div>
+
+<div id="modal" class="modal">
+    <div class="modal__content">
+        <p class="modal_message">(Modal Dialog message)</p>
+        <button class="modal__ok">OK</button>
+    </div>
+</div>
+
+
 </body>
 <script src="emojis.js"></script>
 <script src="emoji-imgs.js"></script>

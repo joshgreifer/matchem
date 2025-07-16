@@ -56,7 +56,7 @@ Object.defineProperty(Array.prototype, 'partition', {
         }
 })
 
-async function game(instructions: string, set: string[], cols: number, rows: number, numInitialSets: number, setSize : number, timeoutMs: number = 3000) {
+async function level(levelIndex: number, instructions: string, set: string[], cols: number, rows: number, numInitialSets: number, setSize : number, timeoutMs: number = 3000) {
 
     const scoreEl = document.querySelector('#score') as HTMLDivElement;
 
@@ -73,7 +73,7 @@ async function game(instructions: string, set: string[], cols: number, rows: num
 
 
 
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
         (document.querySelector('#instructions') as HTMLDivElement).innerHTML = instructions;
 
 
@@ -208,7 +208,6 @@ async function game(instructions: string, set: string[], cols: number, rows: num
                     // Check if we have a match
                     if (++numMatches == setSize-1) {
                         // We have a match
-                        // foundAtLeastOneMatch = true;  // Only need to set this once in the game, but no harm in setting it multiple times
                         let score = 0;  // No score if timeout
                         let msToFindMatch = Date.now() - lastMatchTime;
 
@@ -232,7 +231,7 @@ async function game(instructions: string, set: string[], cols: number, rows: num
                             // playAudioBuffer(buffer);
                         }
 
-                        scoreEl.innerHTML = `Score: ${totalScore.toFixed(0)}  (${setsRemaining.toFixed(0)})`
+                        scoreEl.innerHTML = `Level ${levelIndex+1} - Score: ${totalScore.toFixed(0)}  (${setsRemaining.toFixed(0)})`
 
                         for (const cell of matchingCells)
                             cell.classList.add('rotateOut')
@@ -240,7 +239,7 @@ async function game(instructions: string, set: string[], cols: number, rows: num
 
                         resetTimerBar();
                         if (setsRemaining === 0) {
-                            // Game over
+                            // Level over
                             resolve();
                         }
 
@@ -281,7 +280,7 @@ async function game(instructions: string, set: string[], cols: number, rows: num
                 makeTileAtIndex(gridIndex)
             ++emoji_idx;
             ++setsRemaining;
-            scoreEl.innerHTML = `Score: 0 (${setsRemaining.toFixed(0)})`
+            scoreEl.innerHTML = `Level ${levelIndex+1} - Score: ${totalScore.toFixed(0)}  (${setsRemaining.toFixed(0)})`
             return tileIndices
         }
 
@@ -302,12 +301,13 @@ async function game(instructions: string, set: string[], cols: number, rows: num
                 for (const cell of hintCells)
                     // console.log(cell.classList)
                     cell.classList.add('hint')
+                showModalDialog("Too slow!").then(() => {reject()});
             }
         }
         const deal = () => {
             setTimerBarTransitionTime(864_000_000); // 1 day, so it doesn't animate
             resetTimerBar();
-            // remove any tiles that were hinted at in a previous game
+            // remove any tiles that were hinted at in a previous level (should not happen)
             document.querySelectorAll<HTMLDivElement>('.tile.hint')
                 .forEach(el => el.classList.remove('hint'));
             let setNum = 0;
@@ -409,18 +409,95 @@ async function playAudioBuffer(buffer: AudioBuffer) {
 // const set = allEmojis
 const set = emojiImgs;
 
+const modalDialog = document.querySelector('.modal') as HTMLDivElement;
+const modalDialogMessage = document.querySelector('.modal_message') as HTMLDivElement;
+const modalDialogOkButton = document.querySelector('.modal__ok') as HTMLButtonElement;
+
+const showModalDialog = async (message: string) => {
+    return new Promise<void>((resolve) => {
+        modalDialogOkButton.addEventListener('click', e => { modalDialog.classList.remove('active'); resolve(); }, { once: true });
+
+        modalDialogMessage.innerHTML = message;
+        modalDialog.classList.add('active');
+        modalDialogOkButton.focus();
+    })
+
+}
+// 1) Define your levels in one place:
+interface LevelDef {
+    instruction: string;
+    set: string[];
+    rows: number;
+    cols: number;
+    numInitialSets: number;
+    setSize: number;
+    timeoutMs: number;
+}
+
+const levels: LevelDef[] = [
+    { instruction: "Match  pairs.",               set, rows: 4, cols: 6,  numInitialSets: 24,  setSize: 2, timeoutMs: 30_000 },
+    { instruction: "Match  pairs!",               set, rows: 5, cols: 8,  numInitialSets: 40,  setSize: 2, timeoutMs: 30_000 },
+    { instruction: "Match  sets of three!",       set, rows: 5, cols: 8,  numInitialSets: 80,  setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match pairs!",                set, rows: 7, cols: 10, numInitialSets: 100, setSize: 2, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!",        set, rows: 7, cols: 10, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!",        set, rows: 7, cols: 11, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!",        set, rows: 8, cols: 12, numInitialSets: 200, setSize: 3, timeoutMs: 60_000 },
+];
+
+// 2) playLevel() simply looks up and invokes level():
+async function playLevel(idx: number): Promise<void> {
+    if (idx < 0 || idx >= levels.length) {
+        throw new RangeError(`Invalid level index ${idx}`);
+    }
+    const { instruction, set, rows, cols, numInitialSets, setSize, timeoutMs } = levels[idx];
+    await level(idx, instruction, set, rows, cols, numInitialSets, setSize, timeoutMs);
+}
+
+
+/**
+ * Retrieve the persisted reached level (defaulting to 0).
+ */
+function getReachedLevel(): number {
+    const stored = localStorage.getItem('reached_level');
+    return stored !== null ? parseInt(stored, 10) : 0;  //
+}
+
+/**
+ * Persist a new reached level.
+ */
+function setReachedLevel(level: number): void {
+    localStorage.setItem('reached_level', String(level));  //
+}
+
+/**
+ * Plays the next unreached level, then increments the stored reached_level
+ * only if playLevel resolves successfully.
+ */
+async function playReachedLevel(): Promise<void> {
+    const levelIndex = getReachedLevel();
+    try {
+        await playLevel(levelIndex);        // invoke with no args from caller
+        setReachedLevel(levelIndex + 1);    // only increment on success
+    } catch (err) {
+        // playLevel rejected (e.g. user lost); do not advance reached_level
+        console.error(`Level ${levelIndex} failed or was aborted:`, err);
+        // throw err;  // rethrow if you want callers to handle it
+    }
+}
+
+
 (async () => {
 // Init audio
     matchOkAudioBuffer = await getAudioBufferFromFile('/audio/match_ok.mp3');
     matchGoodAudioBuffer = await getAudioBufferFromFile('/audio/match_good.mp3');
     matchExcellentAudioBuffer = await getAudioBufferFromFile('/audio/match_excellent.mp3');
 
-    await game("Match  pairs.", set, 4, 6, 24, 2,  30_000);
-    await game("Match  pairs!", set, 5, 8, 40, 2,  30_000);
-    await game("Match  sets of three!", set, 5, 8, 80, 3,  30_000);
-    await game("Match pairs!", set, 7, 10, 100, 2,  60_000);
-    await game("Match sets of three!", set, 7, 10, 100, 3,  60_000);
-    await game("Match sets of three!", set, 7, 11, 100, 3,  60_000);
-    await game("Match sets of three!", set, 8, 12, 200, 3,  60_000);
+    await showModalDialog("Ready to play?");
+    for (;;)
+        await playReachedLevel().catch(async (err) => {
+            console.error("Game over or aborted:", err);
+            await showModalDialog("Game over!  Try again?");
+        });
+
 })();
 
