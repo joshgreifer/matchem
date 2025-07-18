@@ -123,16 +123,16 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
                 if (tileEl.classList.contains('rotateOut'))
                     --grid[i];
             };
-            const touched = (e) => {
-                e.preventDefault();
-                if (lock)
-                    return;
-                lock = true;
+            const touched = async (e) => {
+                // if (lock)
+                //     return;
+                // lock = true;
                 for (const cell of hintCells) {
                     cell.classList.remove('hint');
                 }
                 if (matchingCells.length == 0) {
                     tileEl.classList.add("selected");
+                    playSoundEffect("selected");
                     matchingCells.push(tileEl);
                 }
                 else if (!matchingCells.includes(tileEl) && comparator(tileEl, matchingCells[0])) {
@@ -148,20 +148,19 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
                         }
                         else if (msToFindMatch < 3000) {
                             score = 25;
-                        }
-                        else if (msToFindMatch < 5000) {
-                            score = 10;
+                            // } else if (msToFindMatch < 5000) {
+                            //     score = 10;
                         }
                         else
-                            score = 0;
+                            score = 10;
                         totalScore += score;
                         numMatches = 0;
                         // foundAtLeastOneMatch = true;
                         setsRemaining -= 1;
                         if (score > 0) {
-                            const buffer = score == 100 ? matchExcellentAudioBuffer : (score == 25 ? matchGoodAudioBuffer : matchOkAudioBuffer);
-                            (async () => { await playAudioBuffer(buffer); })();
-                            // playAudioBuffer(buffer);
+                            const soundEffectName = score == 100 ? "excellent" : (score == 25 ? "good" : "selected3");
+                            // Don't await, these sounds take a long time to play
+                            playSoundEffect(soundEffectName);
                         }
                         scoreEl.innerHTML = `Level ${levelIndex + 1} - Score: ${totalScore.toFixed(0)}  (${setsRemaining.toFixed(0)})`;
                         for (const cell of matchingCells)
@@ -173,6 +172,9 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
                             resolve();
                         }
                     }
+                    else { // Not a match yet
+                        playSoundEffect(matchingCells.length == 2 ? "selected2" : "selected3");
+                    }
                 }
                 else {
                     for (const cell of matchingCells) {
@@ -182,6 +184,7 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
                     matchingCells = [];
                     numMatches = 0;
                     tileEl.classList.add("rotateBack");
+                    playSoundEffect("deselected");
                 }
                 lock = false;
             };
@@ -255,6 +258,7 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
                     clearInterval(to);
                     setTimerBarTransitionTime(timeoutMs);
                     resetTimerBar();
+                    // playClockTick();
                 }
             }, 50);
             // for (let setNum = 0; set < numInitialSets; ++set)
@@ -298,31 +302,91 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
         deal();
     });
 }
-const ctx = new AudioContext({ latencyHint: 'playback' });
-let matchOkAudioBuffer;
-let matchGoodAudioBuffer;
-let matchExcellentAudioBuffer;
+const ctx = new AudioContext({ latencyHint: 'interactive' });
+// Keep soundbars from going into standby mode by playing a very high frequency sound
+// https://www.reddit.com/r/Soundbars/comments/nyxpzp/soundbar_standby_blocker_prevent_soundbar_from/?utm_source=chatgpt.com
+const oscTick = ctx.createOscillator();
+oscTick.frequency.value = ctx.sampleRate / 2 - 2; // Just below nyquist frequency
+oscTick.connect(ctx.destination);
+oscTick.start();
+const SoundEffect = {
+    "selected": undefined,
+    "selected2": undefined,
+    "selected3": undefined,
+    "deselected": undefined,
+    "good": undefined,
+    "excellent": undefined,
+    "ok": undefined
+};
 async function getAudioBufferFromFile(fileName) {
     const resp = await fetch(fileName);
     const array = await resp.arrayBuffer();
     return await ctx.decodeAudioData(array);
 }
+let ctxLastTime = 0;
 async function playAudioBuffer(buffer) {
-    if (ctx.state !== "running") {
-        await ctx.resume(); // Ensures context is live
-    }
+    if (ctx.state != 'running')
+        await ctx.resume();
     const src = ctx.createBufferSource();
     src.buffer = buffer;
+    console.log("Elapsed since last call :", (ctx.currentTime - ctxLastTime).toFixed(1) + "s");
+    ctxLastTime = ctx.currentTime;
     src.connect(ctx.destination);
-    setTimeout(() => {
-        src.start();
-    }, 0);
+    src.start();
+    console.log("started playing audio buffer", buffer);
     return new Promise((resolve) => {
         src.onended = () => {
+            console.log("onended playing audio buffer", buffer);
+            src.disconnect(ctx.destination); // Disconnect after playback
             resolve();
         };
     });
 }
+async function playSoundEffect(name) {
+    console.log(name, "sound effect requested");
+    const buffer = SoundEffect[name];
+    if (buffer) {
+        await playAudioBuffer(buffer);
+        console.log(name, "sound effect played");
+    }
+}
+// repeatedly play a clock tick sound every second
+function playClockTick() {
+    if (ctx.state !== 'running') {
+        ctx.resume();
+    }
+    const src = ctx.createBufferSource();
+    if (!SoundEffect["clock-tick"]) {
+        console.warn("Clock tick sound effect not loaded");
+        return;
+    }
+    src.buffer = SoundEffect["clock-tick"];
+    src.connect(ctx.destination);
+    src.start();
+    setTimeout(playClockTick, 1000); // Play again after 1 second
+}
+function getBlip(frequency, risingDuration, fallingDuration) {
+    const sampleRate = ctx.sampleRate; // Use the context's actual sample rate
+    const totalDuration = risingDuration + fallingDuration;
+    const length = Math.floor(sampleRate * totalDuration);
+    const buffer = ctx.createBuffer(1, length, sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) {
+        const t = i / sampleRate;
+        let amplitude;
+        if (t < risingDuration) {
+            amplitude = t / risingDuration;
+        }
+        else {
+            amplitude = 1 - ((t - risingDuration) / fallingDuration);
+        }
+        amplitude = Math.max(0, Math.min(1, amplitude)); // Clamp to [0,1]
+        const chord = Math.sin(2 * Math.PI * frequency * t) + .2 * Math.sin(2 * Math.PI * frequency * 1.5 * t) + .1 * Math.sin(2 * Math.PI * frequency * 1.25 * t);
+        data[i] = amplitude * chord / 3;
+    }
+    return buffer;
+}
+// Example usage: 440 Hz, 0.1s rise, 0.2s fall
 // Call init() on startup, then playChimeBuffer() whenever you need the chime
 // const set = allEmojis
 const set = emojiImgs;
@@ -338,7 +402,7 @@ const showModalDialog = async (message) => {
     });
 };
 const levels = [
-    { instruction: "Match  pairs.", set, rows: 4, cols: 6, numInitialSets: 24, setSize: 2, timeoutMs: 30_000 },
+    { instruction: "Match  pairs.", set, rows: 4, cols: 6, numInitialSets: 24, setSize: 2, timeoutMs: 3000_000 },
     { instruction: "Match  pairs!", set, rows: 5, cols: 8, numInitialSets: 40, setSize: 2, timeoutMs: 30_000 },
     { instruction: "Match  sets of three!", set, rows: 5, cols: 8, numInitialSets: 80, setSize: 3, timeoutMs: 60_000 },
     { instruction: "Match pairs!", set, rows: 7, cols: 10, numInitialSets: 100, setSize: 2, timeoutMs: 60_000 },
@@ -390,9 +454,14 @@ if (!(isNaN(levelIndex) || levelIndex < 0 || levelIndex >= levels.length)) {
 }
 (async () => {
     // Init audio
-    matchOkAudioBuffer = await getAudioBufferFromFile('/audio/match_ok.mp3');
-    matchGoodAudioBuffer = await getAudioBufferFromFile('/audio/match_good.mp3');
-    matchExcellentAudioBuffer = await getAudioBufferFromFile('/audio/match_excellent.mp3');
+    SoundEffect["selected"] = getBlip(1000, 0.01, 0.03);
+    SoundEffect["selected2"] = getBlip(1250, 0.01, 0.03);
+    SoundEffect["selected3"] = getBlip(1500, 0.01, 0.03);
+    SoundEffect["deselected"] = getBlip(200, 0.01, 0.05);
+    SoundEffect["good"] = await getAudioBufferFromFile('/audio/match_good.mp3');
+    SoundEffect["excellent"] = await getAudioBufferFromFile('/audio/match_excellent.mp3');
+    SoundEffect["ok"] = await getAudioBufferFromFile('/audio/match_ok.mp3');
+    SoundEffect["clock-tick"] = await getAudioBufferFromFile('/audio/clock_tick.wav');
     await showModalDialog("Ready to play?");
     for (;;)
         await playReachedLevel().catch(async (err) => {
