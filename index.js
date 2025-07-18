@@ -1,7 +1,12 @@
 "use strict";
+Object.defineProperty(Array.prototype, 'randomIndex', {
+    value: function () {
+        return this.length ? Math.floor(Math.random() * this.length) : undefined;
+    }
+});
 Object.defineProperty(Array.prototype, 'randomElement', {
     value: function () {
-        return this.length ? this[Math.floor(Math.random() * this.length)] : undefined;
+        return this.length ? this[this.randomIndex()] : undefined;
     }
 });
 Object.defineProperty(Array.prototype, 'shuffle', {
@@ -49,23 +54,6 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
         let matchingCells = [];
         let hintCells = []; // Cells that are currently being hinted at
         const i2rc = (i) => [Math.floor(i / cols), i % cols];
-        const getGridIndexWithFewestTiles = () => {
-            const p = [];
-            for (let i = 0; i < grid_len; ++i)
-                p.push({ i: i, h: grid[i] });
-            p.sort((a, b) => a.h - b.h);
-            let h = p[0].h;
-            const lp = [];
-            lp.push(p[0].i);
-            for (let j = 1; j < grid_len; ++j)
-                if (p[j].h > h)
-                    break;
-                else {
-                    lp.push(p[j].i);
-                }
-            // @ts-ignore
-            return lp.shuffle()[0];
-        };
         const topTiles = () => {
             const tiles = new Array(grid_len).fill(undefined);
             for (const el of document.querySelectorAll('.tile')) {
@@ -80,7 +68,6 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
         const findAVisibleSet = () => {
             const tiles = topTiles();
             const visibleTiles = tiles.filter(t => t !== undefined && !t.classList.contains('dummy') && !t.classList.contains('rotateOut'));
-            // @ts-ignore
             const partitions = visibleTiles.partition((t) => set !== emojiImgs ? t.innerText : t.firstElementChild.src);
             for (const key in partitions)
                 if (partitions[key].length >= setSize)
@@ -107,7 +94,6 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
                 (a, b) => (a.firstElementChild).src === (b.firstElementChild).src
                 : (a, b) => a.innerText === b.innerText;
             // https://stackoverflow.com/questions/48419167/how-to-convert-one-emoji-character-to-unicode-codepoint-number-in-javascript
-            // @ts-ignore
             // console.log([...v].map(e => e.codePointAt(0).toString(16)).join(`-`)) // gives correctly 1f469-200d-2695-fe0
             const tileEl = document.createElement('div');
             const [r, c] = i2rc(i);
@@ -204,23 +190,39 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
             return;
         };
         const dealSet = (n) => {
-            const tileIndices = []; // Value is irrelevant, gets set in do loop
-            // Add a tile at lowest pile
-            tileIndices.push(getGridIndexWithFewestTiles());
-            let tempIndex = 0; // Value is irrelevant, gets set in do loop
-            for (let i = 0; i < n - 1; ++i) {
-                // Add a matching tile anywhere except on the same grid location as any of the other tiles
-                do {
-                    tempIndex = Math.floor(Math.random() * grid_len);
-                } while (tileIndices.includes(tempIndex));
-                tileIndices.push(tempIndex);
+            // get candidate grid positions, initially all grid positions
+            const candidateGridIndexes = [...Array(grid.length).keys()];
+            /**
+             * Chooses a grid index for a new set:
+             * - If any grid positions have zero tiles, returns one of those at random.
+             * - Otherwise, returns a random position from all grid slots.
+             * returns the index of the grid index in candidateGridIndexes!!
+             */
+            const getIndexForNewTile = () => {
+                const initialCandidateIndex = candidateGridIndexes.randomIndex();
+                // from this index, search for the first grid position with zero tiles forward...
+                for (let i = initialCandidateIndex; i < candidateGridIndexes.length; i++) {
+                    if (grid[candidateGridIndexes[i]] === 0)
+                        return i;
+                }
+                // ...and if not found, search backwards
+                for (let i = initialCandidateIndex - 1; i >= 0; i--) {
+                    if (grid[candidateGridIndexes[i]] === 0)
+                        return i;
+                }
+                // otherwise, return a random index from the candidates
+                return initialCandidateIndex;
+            };
+            for (let i = 0; i < n; ++i) {
+                const indexOfCandidate = getIndexForNewTile();
+                makeTileAtIndex(candidateGridIndexes[indexOfCandidate]);
+                // Don't choose this index again for this set, to prevent any tiles in the set being dealt to the same grid position (making it impossible to match)
+                candidateGridIndexes.splice(indexOfCandidate, 1);
             }
-            for (const gridIndex of tileIndices)
-                makeTileAtIndex(gridIndex);
+            // Next tile to be dealt is the next emoji in the shuffled set
             ++emoji_idx;
             ++setsRemaining;
             scoreEl.innerHTML = `Level ${levelIndex + 1} - Score: ${totalScore.toFixed(0)}  (${setsRemaining.toFixed(0)})`;
-            return tileIndices;
         };
         const userFoundMatchBeforeTimeout = () => {
             return Date.now() - lastMatchTime < timeoutMs;
@@ -279,8 +281,6 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
         const setTimerBarTransitionTime = (milliSeconds) => {
             document.documentElement.style.setProperty('--TRANSITION_TIME', `${milliSeconds / 1000}s`);
         };
-        // @ts-ignore
-        // const emojis = set.slice(0,100).shuffle()
         const emojis = set.shuffle();
         let emoji_idx = 0;
         const deckEl = document.querySelector('.deck');
@@ -331,7 +331,7 @@ const modalDialogMessage = document.querySelector('.modal_message');
 const modalDialogOkButton = document.querySelector('.modal__ok');
 const showModalDialog = async (message) => {
     return new Promise((resolve) => {
-        modalDialogOkButton.addEventListener('click', e => { modalDialog.classList.remove('active'); resolve(); }, { once: true });
+        modalDialogOkButton.addEventListener('click', () => { modalDialog.classList.remove('active'); resolve(); }, { once: true });
         modalDialogMessage.innerHTML = message;
         modalDialog.classList.add('active');
         modalDialogOkButton.focus();
@@ -382,6 +382,11 @@ async function playReachedLevel() {
         console.error(`Level ${levelIndex} failed or was aborted:`, err);
         // throw err;  // rethrow if you want callers to handle it
     }
+}
+const strLevel = prompt(`Level: (0-${levels.length - 1})\n\n:`, getReachedLevel().toString());
+const levelIndex = strLevel !== null ? parseInt(strLevel, 10) : 0;
+if (!(isNaN(levelIndex) || levelIndex < 0 || levelIndex >= levels.length)) {
+    setReachedLevel(levelIndex); // Reset reached level to 0 on startup
 }
 (async () => {
     // Init audio
