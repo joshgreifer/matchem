@@ -35,27 +35,149 @@ Object.defineProperty(Array.prototype, 'partition', {
         return partitions;
     }
 });
-async function level(levelIndex, instructions, set, cols, rows, numInitialSets, setSize, timeoutMs = 3000) {
+class DeckModel {
+    _rows;
+    _cols;
+    _names;
+    _deck = [];
+    _selectedTiles = [];
+    constructor(_rows, _cols, _names = emojiImgs) {
+        this._rows = _rows;
+        this._cols = _cols;
+        this._names = _names;
+        this._names = this._names.shuffle();
+        for (let i = 0; i < _rows * _cols; ++i) {
+            this._deck.push([]);
+        }
+    }
+    get deck() {
+        return this._deck;
+    }
+    dealSet(setSize) {
+    }
+    deal(numSets) {
+    }
+    GetTileAt(i, positionInPile = -1) {
+        const deckPile = this._deck[i];
+        if (positionInPile < 0)
+            positionInPile = deckPile.length - positionInPile; // Use -1 for top tile, -2 for second from top, etc.
+        return deckPile[positionInPile];
+    }
+    get Rows() {
+        return this._rows;
+    }
+    get Cols() {
+        return this._cols;
+    }
+}
+class DeckView {
+    _rows;
+    _cols;
+    _imageSet;
+    _el;
+    _visibleTiles = [];
+    constructor(_rows, _cols, _imageSet = emojiImgs) {
+        this._rows = _rows;
+        this._cols = _cols;
+        this._imageSet = _imageSet;
+        const el = document.querySelector('.deck');
+        // const audioElGood = document.querySelector('#audio_match_good') as HTMLAudioElement;
+        // const audioElOk = document.querySelector('#audio_match_ok') as HTMLAudioElement;
+        // Make deck
+        el.innerHTML = "";
+        el.style.gridTemplateColumns = `repeat(${_cols}, minmax(0, 1fr))`;
+        el.style.gridTemplateRows = `repeat(${_rows}, minmax(0, 1fr))`;
+        el.style.aspectRatio = `${_cols} / ${_rows}`; // Set aspect ratio of deck
+        this._el = el;
+        // create TileView objects for each pile in the deck
+        for (let i = 0; i < _rows * _cols; ++i) {
+            const view = new TileView(this, i);
+            this._visibleTiles.push(view);
+        }
+    }
+    getPileAtIndex(i) {
+        return this._visibleTiles[i];
+    }
+    RC(i) {
+        return [Math.floor(i / this._cols), i % this._cols];
+    }
+    get ImageSet() {
+        return this._imageSet;
+    }
+    get Element() {
+        return this._el;
+    }
+    get Rows() {
+        return this._rows;
+    }
+    get Cols() {
+        return this._cols;
+    }
+    clearDeck() {
+        this._el.innerHTML = "";
+    }
+}
+class TileView {
+    _deckView;
+    _el;
+    constructor(_deckView, index) {
+        this._deckView = _deckView;
+        const el = document.createElement('div');
+        el.className = 'tile';
+        el.id = `pile-${index}`;
+        el.dataset['index'] = index.toString(); // Store the index in a data attribute for easy access
+        // Get the row and column for this from the deck view
+        const [r, c] = this._deckView.RC(index);
+        el.style.gridRow = `${r + 1}`;
+        el.style.gridColumn = `${c + 1}`;
+        el.classList.add('fade-in', 'grow');
+        _deckView.Element.appendChild(el);
+        el.onanimationend = el.ontransitionend = () => {
+            el.className = 'tile'; // Remove all animation classes at the end of every animation
+        };
+        this._el = el;
+    }
+    get Element() {
+        return this._el;
+    }
+    clear() {
+        this._el.innerHTML = "";
+    }
+    set Name(tileName) {
+        this._el.dataset['name'] = tileName;
+        if (this._deckView.ImageSet === emojiImgs)
+            this._el.innerHTML = `<img src="imgs/${tileName}.png" alt="${tileName}">`;
+        else
+            this._el.innerText = tileName;
+    }
+    get Name() {
+        return this._el.dataset['name'] || '';
+    }
+}
+async function level(levelIndex, instructions, glbImageSet, cols, rows, numInitialSets, setSize, timeoutMs = 3000) {
     const scoreEl = document.querySelector('#score');
     // const timeoutActionType: "hint" | "add" | "remove" = setsToAddPerTimeout === 0 ? "hint" : setsToAddPerTimeout > 0 ? "add" : "remove"
     // let foundAtLeastOneMatch = false; // We don't do the timeout action until the after the first successful match
     let setsRemaining = 0;
     let lastMatchTime = 0;
-    // Hack
-    let lock = false;
-    let numTilesDealt = 0;
     let totalScore = 0;
+    if (numInitialSets < 0) {
+        numInitialSets = rows * cols / setSize; // Deal just enough
+    }
     return new Promise((resolve, reject) => {
         document.querySelector('#instructions').innerHTML = instructions;
         const grid_len = cols * rows;
         // create a grid
-        const grid = new Array(grid_len).fill(0);
-        let numMatches = 0;
-        let matchingCells = [];
-        let hintCells = []; // Cells that are currently being hinted at
+        // const grid: number[] = new Array<number>(grid_len).fill(0)
+        const deckView = new DeckView(rows, cols, glbImageSet);
+        let currentMatchString = 0;
+        let matchingSelectedPiles = [];
+        let hintPiles = []; // Cells that are currently being hinted at
         const i2rc = (i) => [Math.floor(i / cols), i % cols];
         const topTiles = () => {
-            const tiles = new Array(grid_len).fill(undefined);
+            console.log("topTiles() is broken - TODO fix it");
+            return [];
+            const tiles = new Array(rows * cols).fill(undefined);
             for (const el of document.querySelectorAll('.tile')) {
                 const [locS, zIndexS] = el.id.split('-');
                 const loc = parseInt(locS);
@@ -68,78 +190,86 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
         const findAVisibleSet = () => {
             const tiles = topTiles();
             const visibleTiles = tiles.filter(t => t !== undefined && !t.classList.contains('dummy') && !t.classList.contains('rotateOut'));
-            const partitions = visibleTiles.partition((t) => set !== emojiImgs ? t.innerText : t.firstElementChild.src);
+            const partitions = visibleTiles.partition((t) => glbImageSet !== emojiImgs ? t.innerText : t.firstElementChild.src);
             for (const key in partitions)
                 if (partitions[key].length >= setSize)
                     return partitions[key];
             return [];
         };
-        const makeDummyTileAtIndex = (i) => {
-            const dummyTileEl = document.createElement('div');
-            const [r, c] = i2rc(i);
-            dummyTileEl.className = 'tile dummy';
-            dummyTileEl.style.zIndex = -1000 + '';
-            dummyTileEl.id = `${i}-${0}`;
-            dummyTileEl.style.gridRow = `${r + 1}`;
-            dummyTileEl.style.gridColumn = `${c + 1}`;
-            deckEl.appendChild(dummyTileEl);
-            return dummyTileEl;
+        const getPileAtIndex = (i) => {
+            return document.querySelector(`#pile-${i}`);
         };
-        const makeTileAtIndex = (i) => {
-            // Images must always be unique
-            if (emoji_idx > emojis.length - 1)
-                return;
-            const v = emojis[emoji_idx];
-            const comparator = set === emojiImgs ?
-                (a, b) => (a.firstElementChild).src === (b.firstElementChild).src
-                : (a, b) => a.innerText === b.innerText;
+        const makePileAtIndex = (i) => {
+            const setValFromPositionInPile = (positionInPile) => {
+                const deckPile = deck[i];
+                if (positionInPile < 0)
+                    positionInPile = deckPile.length - positionInPile; // Last tile in the pile
+                if (deckPile.length === 0) {
+                    pileEl.style.display = 'none';
+                    return;
+                }
+                pileEl.style.display = 'block';
+                const v = deckPile[positionInPile];
+                if (glbImageSet === emojiImgs)
+                    pileEl.innerHTML = `<img src="imgs/${v}.png" alt="${v}">`;
+                else
+                    pileEl.innerText = v;
+            };
+            const displayTopTileInThisPile = () => {
+                setValFromPositionInPile(-1);
+            };
+            const comparator = glbImageSet === emojiImgs ?
+                (a, b) => a === (b.firstElementChild).alt
+                : (a, b) => a === b.innerText;
             // https://stackoverflow.com/questions/48419167/how-to-convert-one-emoji-character-to-unicode-codepoint-number-in-javascript
             // console.log([...v].map(e => e.codePointAt(0).toString(16)).join(`-`)) // gives correctly 1f469-200d-2695-fe0
-            const tileEl = document.createElement('div');
+            const pileEl = document.createElement('div');
             const [r, c] = i2rc(i);
-            ++grid[i];
-            const zIndex = 1000 + numTilesDealt++;
-            tileEl.className = 'tile';
-            tileEl.style.zIndex = `${zIndex}`;
-            tileEl.id = `${i}-${zIndex - 1000}`;
-            if (set === emojiImgs)
-                tileEl.innerHTML = `<img src="imgs/${v}.png" alt="${v}">`;
-            else
-                tileEl.innerText = v;
-            tileEl.style.gridRow = `${r + 1}`;
-            tileEl.style.gridColumn = `${c + 1}`;
-            tileEl.classList.add('fade-in', 'grow');
-            deckEl.appendChild(tileEl);
-            tileEl.onanimationend = () => {
-                tileEl.className = 'tile'; // Remove all animation classes
+            pileEl.className = 'tile';
+            pileEl.id = `pile-${i}`;
+            pileEl.style.gridRow = `${r + 1}`;
+            pileEl.style.gridColumn = `${c + 1}`;
+            pileEl.classList.add('fade-in', 'grow');
+            deckEl.appendChild(pileEl);
+            pileEl.onanimationend = pileEl.ontransitionend = () => {
+                pileEl.className = 'tile'; // Remove all animation classes
             };
-            tileEl.ontransitionend = () => {
-                if (tileEl.classList.contains('rotateOut'))
-                    tileEl.remove();
-                else
-                    tileEl.className = 'tile'; // Remove all animation classes
-            };
-            tileEl.ontransitionstart = () => {
-                if (tileEl.classList.contains('rotateOut'))
-                    --grid[i];
+            const rotate = () => {
+                pileEl.className = 'tile'; // remove all animation classes
+                // clone the pile element to remove the event listeners
+                const tempEl = pileEl.cloneNode(true);
+                tempEl.id = `temp-${i}`;
+                // place it above the original pile (z-order)
+                tempEl.style.zIndex = "1000";
+                // add it to the deck so it's visible
+                deckEl.appendChild(tempEl);
+                tempEl.ontransitionend = () => {
+                    displayTopTileInThisPile();
+                    tempEl.remove();
+                };
+                // https://stackoverflow.com/questions/24148403/trigger-css-transition-on-appended-element/24195559#24195559
+                void tempEl.offsetWidth;
+                tempEl.classList.add('rotateOut'); // Add the rotateOut class to start the animation
+                // Show the tile underneath, if any.  It will be reset after the animation ends
+                setValFromPositionInPile(-2);
             };
             const touched = async (e) => {
                 // if (lock)
                 //     return;
                 // lock = true;
-                for (const cell of hintCells) {
-                    cell.classList.remove('hint');
+                for (const pile of hintPiles) {
+                    pile.classList.remove('hint');
                 }
-                if (matchingCells.length == 0) {
-                    tileEl.classList.add("selected");
+                if (matchingSelectedPiles.length == 0) {
+                    pileEl.classList.add("selected");
                     playSoundEffect("selected");
-                    matchingCells.push(tileEl);
+                    matchingSelectedPiles.push(i);
                 }
-                else if (!matchingCells.includes(tileEl) && comparator(tileEl, matchingCells[0])) {
-                    matchingCells.push(tileEl);
-                    tileEl.classList.add("selected");
+                else if (!matchingSelectedPiles.includes(i) && comparator(TileAt(matchingSelectedPiles[0]), pileEl)) {
+                    matchingSelectedPiles.push(i);
+                    pileEl.classList.add("selected");
                     // Check if we have a match
-                    if (++numMatches == setSize - 1) {
+                    if (matchingSelectedPiles.length == setSize) {
                         // We have a match
                         let score = 0; // No score if timeout
                         let msToFindMatch = Date.now() - lastMatchTime;
@@ -154,7 +284,6 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
                         else
                             score = 10;
                         totalScore += score;
-                        numMatches = 0;
                         // foundAtLeastOneMatch = true;
                         setsRemaining -= 1;
                         if (score > 0) {
@@ -163,9 +292,14 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
                             playSoundEffect(soundEffectName);
                         }
                         scoreEl.innerHTML = `Level ${levelIndex + 1} - Score: ${totalScore.toFixed(0)}  (${setsRemaining.toFixed(0)})`;
-                        for (const cell of matchingCells)
-                            cell.classList.add('rotateOut');
-                        matchingCells = [];
+                        // Begin the removal animation
+                        for (const index of matchingSelectedPiles) {
+                            deck[index].pop();
+                            // Remove the top tile from the deck
+                            displayTopTileInThisPile();
+                        }
+                        matchingSelectedPiles = [];
+                        // deck[i].pop(); // Remove the top tile from the deck
                         resetTimerBar();
                         if (setsRemaining === 0) {
                             // Level over
@@ -173,44 +307,47 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
                         }
                     }
                     else { // Not a match yet
-                        playSoundEffect(matchingCells.length == 2 ? "selected2" : "selected3");
+                        playSoundEffect(matchingSelectedPiles.length == 2 ? "selected2" : "selected3");
                     }
                 }
                 else {
-                    for (const cell of matchingCells) {
-                        cell.classList.remove("selected");
-                        cell.classList.add('rotateBack');
+                    for (const index of matchingSelectedPiles) {
+                        const el = getPileAtIndex(index);
+                        el.classList.remove("selected");
+                        el.classList.add('rotateBack');
                     }
-                    matchingCells = [];
-                    numMatches = 0;
-                    tileEl.classList.add("rotateBack");
+                    matchingSelectedPiles = [];
+                    pileEl.classList.add("rotateBack");
                     playSoundEffect("deselected");
                 }
                 lock = false;
             };
-            tileEl.addEventListener('mousedown', touched);
-            tileEl.addEventListener('touchstart', touched);
+            pileEl.addEventListener('mousedown', touched);
+            pileEl.addEventListener('touchstart', touched);
+            displayTopTileInThisPile();
             return;
         };
         const dealSet = (n) => {
             // get candidate grid positions, initially all grid positions
-            const candidateGridIndexes = [...Array(grid.length).keys()];
+            const candidateGridIndexes = [...Array(deck.length).keys()];
             /**
              * Chooses a grid index for a new set:
              * - If any grid positions have zero tiles, returns one of those at random.
              * - Otherwise, returns a random position from all grid slots.
-             * returns the index of the grid index in candidateGridIndexes!!
+             * Note, this closure returns an index into candidateGridIndexes, NOT a pile index.
+             * To get the pile index on which to place the new tile, use candidateGridIndexes[indexOfCandidate].
+             *
              */
             const getIndexForNewTile = () => {
                 const initialCandidateIndex = candidateGridIndexes.randomIndex();
                 // from this index, search for the first grid position with zero tiles forward...
                 for (let i = initialCandidateIndex; i < candidateGridIndexes.length; i++) {
-                    if (grid[candidateGridIndexes[i]] === 0)
+                    if (deck[candidateGridIndexes[i]].length === 0)
                         return i;
                 }
                 // ...and if not found, search backwards
                 for (let i = initialCandidateIndex - 1; i >= 0; i--) {
-                    if (grid[candidateGridIndexes[i]] === 0)
+                    if (deck[candidateGridIndexes[i]].length === 0)
                         return i;
                 }
                 // otherwise, return a random index from the candidates
@@ -218,7 +355,8 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
             };
             for (let i = 0; i < n; ++i) {
                 const indexOfCandidate = getIndexForNewTile();
-                makeTileAtIndex(candidateGridIndexes[indexOfCandidate]);
+                deck[candidateGridIndexes[indexOfCandidate]].push(emojis[emoji_idx]); // Add the emoji to the deck at this index
+                // makeTileAtIndex(candidateGridIndexes[indexOfCandidate]);
                 // Don't choose this index again for this set, to prevent any tiles in the set being dealt to the same grid position (making it impossible to match)
                 candidateGridIndexes.splice(indexOfCandidate, 1);
             }
@@ -236,9 +374,9 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
                 // HACK (shouldn't occur) - remove any tiles still with the "hint" class
                 document.querySelectorAll('.tile.hint')
                     .forEach(el => el.classList.remove('hint'));
-                hintCells = findAVisibleSet(); // will always find one
+                hintPiles = findAVisibleSet(); // will always find one
                 // console.assert(s.length >= setSize, "There should always be a set of size " + setSize + " visible at this point")
-                for (const cell of hintCells)
+                for (const cell of hintPiles)
                     // console.log(cell.classList)
                     cell.classList.add('hint');
                 showModalDialog("Too slow!").then(() => { reject(); });
@@ -258,9 +396,13 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
                     clearInterval(to);
                     setTimerBarTransitionTime(timeoutMs);
                     resetTimerBar();
+                    for (let i = 0; i < grid_len; ++i)
+                        makePileAtIndex(i);
                     // playClockTick();
                 }
-            }, 50);
+            }, 1);
+            setTimerBarTransitionTime(timeoutMs);
+            resetTimerBar();
             // for (let setNum = 0; set < numInitialSets; ++set)
             //     dealSet();
         };
@@ -285,7 +427,7 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
         const setTimerBarTransitionTime = (milliSeconds) => {
             document.documentElement.style.setProperty('--TRANSITION_TIME', `${milliSeconds / 1000}s`);
         };
-        const emojis = set.shuffle();
+        const emojis = glbImageSet.shuffle();
         let emoji_idx = 0;
         const deckEl = document.querySelector('.deck');
         // const audioElGood = document.querySelector('#audio_match_good') as HTMLAudioElement;
@@ -297,7 +439,7 @@ async function level(levelIndex, instructions, set, cols, rows, numInitialSets, 
         deckEl.style.aspectRatio = `${cols} / ${rows}`; // Set aspect ratio of deck
         // fill with dummy tiles
         for (let i = 0; i < grid_len; ++i) {
-            makeDummyTileAtIndex(i);
+            // makeDummyTileAtIndex(i);
         }
         deal();
     });
@@ -401,22 +543,32 @@ const showModalDialog = async (message) => {
         modalDialogOkButton.focus();
     });
 };
-const levels = [
-    { instruction: "Match  pairs.", set, rows: 4, cols: 6, numInitialSets: 24, setSize: 2, timeoutMs: 3000_000 },
-    { instruction: "Match  pairs!", set, rows: 5, cols: 8, numInitialSets: 40, setSize: 2, timeoutMs: 30_000 },
-    { instruction: "Match  sets of three!", set, rows: 5, cols: 8, numInitialSets: 80, setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match pairs!", set, rows: 7, cols: 10, numInitialSets: 100, setSize: 2, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!", set, rows: 7, cols: 10, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!", set, rows: 7, cols: 11, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!", set, rows: 8, cols: 12, numInitialSets: 200, setSize: 3, timeoutMs: 60_000 },
+const levelsMobile = [
+    { instruction: "Match  pairs.", set, cols: 4, rows: 6, numInitialSets: 24, setSize: 2, timeoutMs: 30_000 },
+    { instruction: "Match  pairs!", set, cols: 5, rows: 8, numInitialSets: 40, setSize: 2, timeoutMs: 30_000 },
+    { instruction: "Match  sets of three!", set, cols: 5, rows: 8, numInitialSets: 80, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match pairs!", set, cols: 7, rows: 10, numInitialSets: 100, setSize: 2, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!", set, cols: 7, rows: 10, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!", set, cols: 7, rows: 11, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!", set, cols: 8, rows: 12, numInitialSets: 200, setSize: 3, timeoutMs: 60_000 },
 ];
+const levelsDesktop = [
+    { instruction: "Match  pairs.", set, cols: 3, rows: 4, numInitialSets: 10, setSize: 2, timeoutMs: 3000_000 },
+    { instruction: "Match  pairs!", set, cols: 21, rows: 14, numInitialSets: -1, setSize: 2, timeoutMs: 30_000 },
+    { instruction: "Match  sets of three!", set, cols: 5, rows: 8, numInitialSets: 80, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match pairs!", set, cols: 7, rows: 10, numInitialSets: 100, setSize: 2, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!", set, cols: 7, rows: 10, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!", set, cols: 7, rows: 11, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!", set, cols: 8, rows: 12, numInitialSets: 200, setSize: 3, timeoutMs: 60_000 },
+];
+const levels = screen.width > screen.height && screen.width >= 1280 ? levelsDesktop : levelsMobile; // Use desktop levels on larger screens
 // 2) playLevel() simply looks up and invokes level():
 async function playLevel(idx) {
     if (idx < 0 || idx >= levels.length) {
         throw new RangeError(`Invalid level index ${idx}`);
     }
-    const { instruction, set, rows, cols, numInitialSets, setSize, timeoutMs } = levels[idx];
-    await level(idx, instruction, set, rows, cols, numInitialSets, setSize, timeoutMs);
+    const { instruction, set, cols, rows, numInitialSets, setSize, timeoutMs } = levels[idx];
+    await level(idx, instruction, set, cols, rows, numInitialSets, setSize, timeoutMs);
 }
 /**
  * Retrieve the persisted reached level (defaulting to 0).
