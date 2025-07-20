@@ -207,6 +207,7 @@
 
         div.tile {
             /*aspect-ratio: 1 / 1;*/
+            position: relative;
             text-align: center;
             /*text-shadow: 2px 2px 4px #424242;*/
             background: linear-gradient(135deg, #fffff0 0%, #f4f1d3 100%);
@@ -220,6 +221,53 @@
             box-sizing:  border-box;
             /*filter: drop-shadow(2px 2px 6px #c1b585);*/
 
+        }
+        div.tile::after {
+            display: block;
+            position: absolute;
+            bottom: 2px;
+            right: 5px;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 0.7em;
+            color: #222;
+            border-radius: 50%;
+            width: 1.3em;
+            height: 1.3em;
+            line-height: 1.3em;
+            text-align: center;
+            pointer-events: none; /* Doesn't block clicks */
+            z-index: 10;
+            font-weight: bold;
+            box-shadow: 0 1px 2px #0003;
+        }
+
+        div.tile.set-size-2 {
+            background: linear-gradient(135deg, #fffff0 0%, #f4f1d3 100%);
+
+        }
+        div.tile.set-size-2::after {
+            content: "2";
+            background: radial-gradient(circle at center, #8c4000 0%, #ffe900 100%);
+
+        }
+        div.tile.set-size-3 {
+            background: linear-gradient(135deg, #fffff0 0%, #f4f1d3 100%);
+        }
+        div.tile.set-size-3::after {
+            content: "3";
+            background: radial-gradient(circle at center, #ffffff 0%, #a5a5a5 100%);
+
+        }
+        div.tile.set-size-5 {
+            background: linear-gradient(135deg, #fffff0 0%, #f4f1d3 100%);
+        }
+        div.tile.set-size-5::after {
+            content: "5";
+            background: radial-gradient(circle at center, #f67200 0%, #ffe900 100%);
+
+        }
+        div.tile.selected {
+            background: linear-gradient(135deg, #ff0000 0%, #710202 100%);
         }
         /* Force every tile to be a square */
 
@@ -239,9 +287,7 @@
             transform: rotateY(90deg);
             transition: transform 0.5s;
         }
-        div.selected {
-            background: linear-gradient(135deg, #ff0000 0%, #710202 100%);
-        }
+
         div.rotateBack {
             transform: rotateY(-360deg);
             transition: transform 0.6s;

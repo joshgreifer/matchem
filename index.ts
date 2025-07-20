@@ -69,7 +69,7 @@ Object.defineProperty(Array.prototype, 'partition', {
         }
 })
 
-async function level(levelIndex: number, instructions: string, set: string[], cols: number, rows: number, numInitialSets: number, setSize : number, timeoutMs: number = 3000) {
+async function level(levelIndex: number, instructions: string, cols: number, rows: number, numInitialSets: number, maxSetSize : number, timeoutMs: number = 3000) {
 
     const scoreEl = document.querySelector('#score') as HTMLDivElement;
 
@@ -80,32 +80,23 @@ async function level(levelIndex: number, instructions: string, set: string[], co
 
     let lastMatchTime = 0;
 // Hack
-    let lock: boolean = false;
-    let numTilesDealt = 0;
-    let totalScore = 0;
+    // let lock: boolean = false;
 
-    if (numInitialSets < 0) {
-        numInitialSets = rows * cols / setSize; // Deal just enough
-    }
+    let totalScore = 0;
 
     return new Promise<void>((resolve, reject) => {
         (document.querySelector('#instructions') as HTMLDivElement).innerHTML = instructions;
-
 
         const grid_len = cols * rows
         // create a grid
         // const grid: number[] = new Array<number>(grid_len).fill(0)
 
         const deck: string[][] = Array.from({ length: grid_len }, () => []);
-
-
-        let numMatches = 0;
+        const setSizes: { [name: string]: number } = {};
 
         let matchingCells: HTMLDivElement[] = [];
         let hintCells: HTMLDivElement[] = []; // Cells that are currently being hinted at
         const i2rc = (i: number): [number, number] => [ Math.floor(i / cols), i % cols]
-
-
 
         const topTiles =(): HTMLDivElement[] => {
             const tiles: HTMLDivElement[] = new Array(grid_len).fill(undefined)
@@ -120,17 +111,21 @@ async function level(levelIndex: number, instructions: string, set: string[], co
             return tiles
         }
 
-        const findAVisibleSet = (): HTMLDivElement[] => {
-            const tiles = topTiles()
-            const visibleTiles = tiles.filter(t => t !== undefined && !t.classList.contains('dummy') && !t.classList.contains('rotateOut'))
+        function findAVisibleSet(): HTMLDivElement[] {
+            const sameValueIndexes: { [name: string]: number[] } = {};
 
-            const partitions = visibleTiles.partition((t: HTMLDivElement) => set !== emojiImgs ? t.innerText : (<HTMLImageElement>t.firstElementChild).src)
-            for (const key in partitions)
-                if (partitions[key].length >= setSize)
-                    return partitions[key]
-            return []
+            for (let i = 0; i < deck.length; i++) {
+                const stack = deck[i];
+                if (stack.length === 0) continue;
+                const valueAtTopOfStack = stack[stack.length - 1];
+                if (!sameValueIndexes[valueAtTopOfStack]) sameValueIndexes[valueAtTopOfStack] = [];
+                sameValueIndexes[valueAtTopOfStack].push(i);
+                if (sameValueIndexes[valueAtTopOfStack].length === setSizes[valueAtTopOfStack]) {
+                    return sameValueIndexes[valueAtTopOfStack].map(idx => index2TopTileElement(idx)!);
+                }
+            }
+            return [];
         }
-
 
         const el2Index = (el: HTMLDivElement): number => {
             return parseInt(el.dataset['index'] || '0');
@@ -140,10 +135,10 @@ async function level(levelIndex: number, instructions: string, set: string[], co
             return <HTMLDivElement[]>[...document.querySelectorAll(`.tile[data-index="${i}"]`)!];
         }
 
-        const index2TopTileElement = (i: number): HTMLDivElement | null =>
-            document.querySelector<HTMLDivElement>(
-                `.tile[data-index="${i}"][data-stack-position="top"]`
-            );
+            const index2TopTileElement = (i: number): HTMLDivElement | null =>
+                document.querySelector<HTMLDivElement>(
+                    `.tile[data-index="${i}"][data-stack-position="top"]`
+                );
 
         const index2BottomTileElement = (i: number): HTMLDivElement | null =>
             document.querySelector<HTMLDivElement>(
@@ -153,14 +148,16 @@ async function level(levelIndex: number, instructions: string, set: string[], co
         const setTileElementValue = (tileEl: HTMLDivElement, value: string): void => {
             tileEl.dataset['value'] = value;
             if (!value) {
-                tileEl.innerText = tileEl.innerHTML = '';
+                tileEl.innerHTML = '';
                 tileEl.style.display = 'none';
+                tileEl.dataset['setSize'] = '';
             } else {
-                if (set === emojiImgs) {
-                    tileEl.innerHTML = `<img src="imgs/${value}.png" alt="${value}">`;
-                } else {
-                    tileEl.innerText = value;
-                }
+                tileEl.innerHTML = `<img src="imgs/${value}.png" alt="${value}">`;
+                tileEl.dataset['setSize'] = setSizes[value].toString();
+                tileEl.style.display = 'block';
+
+                tileEl.className = `tile set-size-${setSizes[tileEl.dataset['value']!]}`; // Remove all animation classes
+
             }
         }
 
@@ -179,35 +176,37 @@ async function level(levelIndex: number, instructions: string, set: string[], co
 
 
             const zIndex = isTop ? 1001 : 1000;
-            tileEl.className ='tile'
+
+            tileEl.className = (`tile set-size-0`);
             tileEl.style.zIndex = `${zIndex}`
             tileEl.id = `${i}-${zIndex-1000}`;
 
+            tileEl.dataset['setSize'] = tileEl.dataset['setSize'];
             tileEl.dataset['index'] = i.toString();
             tileEl.dataset['stackPosition'] = isTop ?  'top' : 'bottom';
-            tileEl.dataset['value'] = "";
+            tileEl.dataset['value'] = "0";
 
 
-            if (set === emojiImgs)
-                tileEl.innerHTML = `<img src="" alt="">`
-            else
-                tileEl.innerText = ""
 
-            tileEl.style.gridRow = `${r + 1}`
-            tileEl.style.gridColumn = `${c + 1}`
-            tileEl.classList.add('fade-in', 'grow')
+            tileEl.innerHTML = `<img src="" alt="">`
+
+
+            tileEl.style.gridRow = `${r + 1}`;
+            tileEl.style.gridColumn = `${c + 1}`;
+
+            // tileEl.classList.add('fade-in', 'grow')
 
             tileEl.onanimationend = () => {
-                tileEl.className = 'tile'; // Remove all animation classes
+                tileEl.className = (`tile set-size-${setSizes[tileEl.dataset['value']!]}`); // Remove all animation classes
 
-            }
+            };
             tileEl.ontransitionend = () => {
 
                 if (tileEl.classList.contains('rotateOut'))
                     // Update the display of the stack at this index. The deck will have been updated by the transitionstart handler
                     displayStackAtIndex(i);
 
-                tileEl.className = 'tile'; // Remove all animation classes
+                tileEl.className = (`tile set-size-${setSizes[tileEl.dataset['value']!]}`); // Remove all animation classes
 
             }
             tileEl.ontransitionstart = () => {
@@ -216,6 +215,7 @@ async function level(levelIndex: number, instructions: string, set: string[], co
             }
             const touched = async (e: Event) => {
 
+                e.preventDefault();
                 // if (lock)
                 //     return;
                 // lock = true;
@@ -223,19 +223,19 @@ async function level(levelIndex: number, instructions: string, set: string[], co
                 for (const cell of hintCells) {
                     cell.classList.remove('hint');
                 }
-
+                const tileValue = getTileElementValue(tileEl);
                 if (matchingCells.length == 0) {
                     tileEl.classList.add("selected");
                     playSoundEffect("selected");
                     matchingCells.push(tileEl)
-                } else if (!matchingCells.includes(tileEl) && getTileElementValue(tileEl) === getTileElementValue(matchingCells[0])) {
+                } else if (!matchingCells.includes(tileEl) && tileValue === getTileElementValue(matchingCells[0])) {
 
                     matchingCells.push(tileEl);
                     tileEl.classList.add("selected");
 
 
                     // Check if we have a match
-                    if (++numMatches == setSize-1) {
+                    if (matchingCells.length == setSizes[tileValue]) {
                         // We have a match
                         let score = 0;  // No score if timeout
                         let msToFindMatch = Date.now() - lastMatchTime;
@@ -251,7 +251,7 @@ async function level(levelIndex: number, instructions: string, set: string[], co
 
                         totalScore +=  score;
 
-                        numMatches = 0;
+
                         // foundAtLeastOneMatch = true;
                         setsRemaining -= 1;
                         if (score > 0) {
@@ -284,11 +284,11 @@ async function level(levelIndex: number, instructions: string, set: string[], co
                         cell.classList.add('rotateBack')
                     }
                     matchingCells = []
-                    numMatches = 0;
+
                     tileEl.classList.add("rotateBack");
                     playSoundEffect( "deselected");
                 }
-                lock = false;
+                // lock = false;
             }
             // Add event listeners for touch and mouse events if this is the top tile in the stack
             if (isTop) {
@@ -299,53 +299,6 @@ async function level(levelIndex: number, instructions: string, set: string[], co
 
         }
 
-
-        const dealSet = (n: number) => {
-
-            // get candidate grid positions, initially all grid positions
-            const candidateDeckIndexes  = [...Array(deck.length).keys()];
-
-            /**
-             * Chooses a deck index for a new set:
-             * - If any deck positions have zero tiles, returns one of those at random.
-             * - Otherwise, returns a random position from all grid slots.
-             * returns the index of the deck index in candidateDeckIndexes!!
-             * Be careful to distinguish between the index in the deck and the index in candidateDeckIndexes:
-             * deck[candidateDeckIndexes[index]] is the tile stack at that index in the deck.
-             */
-            const getIndexForNewTile =  (): number => {
-
-                const initialCandidateIndex = candidateDeckIndexes.randomIndex();
-
-                // from this index, search for the first deck position with zero tiles forward...
-                for (let i = initialCandidateIndex; i < candidateDeckIndexes.length; i++) {
-                    if (deck[candidateDeckIndexes[i]].length === 0) return i;
-                }
-                // ...and if not found, search backwards
-                for (let i = initialCandidateIndex - 1; i >= 0; i--) {
-                    if (deck[candidateDeckIndexes[i]].length === 0) return i;
-                }
-                // otherwise, return a random index from the candidates
-                return initialCandidateIndex;
-            }
-
-            for (let i = 0; i < n; ++i) {
-                const indexOfCandidate = getIndexForNewTile();
-                // Add a new tile to the deck at the candidate index
-                const indexInDeck = candidateDeckIndexes[indexOfCandidate]
-                deck[indexInDeck].push(emojis[emoji_idx]);
-                // Make sure we don't deal to the same grid position again for this set, otherwise the user won't be able to find all matches
-                candidateDeckIndexes.splice(indexOfCandidate, 1);
-
-            }
-
-            // Next tile to be dealt is the next emoji in the shuffled set
-            ++emoji_idx;
-
-            ++setsRemaining;
-            scoreEl.innerHTML = `Level ${levelIndex+1} - Score: ${totalScore.toFixed(0)}  (${setsRemaining.toFixed(0)})`
-
-        }
 
         const userFoundMatchBeforeTimeout = (): boolean => {
             return Date.now() - lastMatchTime < timeoutMs
@@ -402,14 +355,90 @@ async function level(levelIndex: number, instructions: string, set: string[], co
                 displayStackAtIndex(i);
         }
 
-        const deal = () => {
+        const getNewTileValue = (() => {
+            let _idx = 0;
+            return (): string => {
+                if (_idx >= allValues.length) _idx = 0;
+                return allValues[_idx++];
+            };
+        })();
+
+        let no_more_empty_stacks = false; // If true, don't search for empty stacks anymore when dealing a new set (speed optimization)
+
+        const dealSet = (setSize: number, toTheBottom: boolean = false)  => {
+
+            const value = getNewTileValue();
+            setSizes[value] = setSize;
+
+            // get candidate grid positions, initially all grid positions
+            // Filter out indexes of stacks that contain a tile with this value
+
+            let candidateDeckIndexes  = [...Array(deck.length).keys()];
+
+
+            /**
+             * Chooses a deck index for a new set:
+             * - If any deck positions have zero tiles, returns one of those at random.
+             * - Otherwise, returns a random position from all grid slots.
+             * returns the index of the deck index in candidateDeckIndexes!!
+             * Be careful to distinguish between the index in the deck and the index in candidateDeckIndexes:
+             * deck[candidateDeckIndexes[index]] is the tile stack at that index in the deck.
+             */
+            const getIndexForNewTile =  (): number => {
+                // Make sure we don't deal the same tile to a stack that already has this tile, guaranteeing that the no tiles with the same value will ever be in the same stack
+                candidateDeckIndexes = candidateDeckIndexes.filter(i => {
+                    const stack = deck[i];
+                    return stack.length === 0 || !stack.includes(value);
+                });
+
+                const initialCandidateIndex = candidateDeckIndexes.randomIndex();
+
+                if (!no_more_empty_stacks) {
+                    // from this index, search for the first deck position with zero tiles forward...
+                    for (let i = initialCandidateIndex; i < candidateDeckIndexes.length; i++) {
+                        if (deck[candidateDeckIndexes[i]].length === 0) return i;
+                    }
+                    // ...and if not found, search backwards
+                    for (let i = initialCandidateIndex - 1; i >= 0; i--) {
+                        if (deck[candidateDeckIndexes[i]].length === 0) return i;
+                    }
+
+                    // If we didn't find any empty stacks, set the flag so we don't search for empty stacks again
+                    no_more_empty_stacks = true;
+                }
+                // otherwise, return a random index from the candidates
+                return initialCandidateIndex;
+            }
+
+            for (let i = 0; i < setSize; ++i) {
+
+                const indexOfCandidate = getIndexForNewTile();
+                // Add a new tile to the deck at the candidate index
+                const indexInDeck = candidateDeckIndexes[indexOfCandidate]
+                if (toTheBottom)
+                    deck[indexInDeck].unshift(value);  // Add to the bottom of the stack
+                else
+                    deck[indexInDeck].push(value);
+
+
+
+            }
+
+
+            ++setsRemaining;
+            scoreEl.innerHTML = `Level ${levelIndex+1} - Score: ${totalScore.toFixed(0)}  (${setsRemaining.toFixed(0)})`
+
+        }
+
+        const initialDeal = () => {
             setTimerBarTransitionTime(864_000_000); // 1 day, so it doesn't animate
             resetTimerBar();
             // remove any tiles that were hinted at in a previous level (should not happen)
             // document.querySelectorAll<HTMLDivElement>('.tile.hint')
             //     .forEach(el => el.classList.remove('hint'));
-
+            no_more_empty_stacks = false; // Reset the flag so we search for empty stacks again
             for (let setNum = 0; setNum < numInitialSets; ++setNum) {
+                const setSize = [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 5].randomElement()!;
                 dealSet(setSize);
             }
 
@@ -418,6 +447,7 @@ async function level(levelIndex: number, instructions: string, set: string[], co
             displayDeck();
 
         }
+
         const resetTimerBar = () => {
             const onBarEnd = () => {
                 timeoutAction();
@@ -444,26 +474,14 @@ async function level(levelIndex: number, instructions: string, set: string[], co
             document.documentElement.style.setProperty('--TRANSITION_TIME', `${milliSeconds / 1000}s`);
         }
 
-        const emojis = set.shuffle()
-        let emoji_idx = 0;
-
         makeEmptyDeck();
 
-
-        deal();
+        initialDeal();
 
     });
 }
 
 const ctx = new AudioContext( {latencyHint: 'interactive' } );
-
-// Keep soundbars from going into standby mode by playing a very high frequency sound
-// https://www.reddit.com/r/Soundbars/comments/nyxpzp/soundbar_standby_blocker_prevent_soundbar_from/?utm_source=chatgpt.com
-const oscTick = ctx.createOscillator();
-oscTick.frequency.value = ctx.sampleRate / 2 - 2;  // Just below nyquist frequency
-oscTick.connect(ctx.destination);
-oscTick.start();
-
 
 const SoundEffect: { [key: string]: AudioBuffer | undefined } = {
     "selected": undefined,
@@ -566,10 +584,7 @@ function getBlip(
 
 // Example usage: 440 Hz, 0.1s rise, 0.2s fall
 
-
-// Call init() on startup, then playChimeBuffer() whenever you need the chime
-// const set = allEmojis
-const set = emojiImgs;
+const allValues = emojiImgs.shuffle()
 
 const modalDialog = document.querySelector('.modal') as HTMLDivElement;
 const modalDialogMessage = document.querySelector('.modal_message') as HTMLDivElement;
@@ -588,7 +603,7 @@ const showModalDialog = async (message: string) => {
 // 1) Define your levels in one place:
 interface LevelDef {
     instruction: string;
-    set: string[];
+
     cols: number;
     rows: number;
     numInitialSets: number;
@@ -597,23 +612,23 @@ interface LevelDef {
 }
 
 const levelsMobile: LevelDef[] = [
-    { instruction: "Match  pairs.",               set, cols: 4, rows: 6,  numInitialSets: 24,  setSize: 2, timeoutMs: 30_000 },
-    { instruction: "Match  pairs!",               set, cols: 5, rows: 8,  numInitialSets: 40,  setSize: 2, timeoutMs: 30_000 },
-    { instruction: "Match  sets of three!",       set, cols: 5, rows: 8,  numInitialSets: 80,  setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match pairs!",                set, cols: 7, rows: 10, numInitialSets: 100, setSize: 2, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!",        set, cols: 7, rows: 10, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!",        set, cols: 7, rows: 11, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!",        set, cols: 8, rows: 12, numInitialSets: 200, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match sets of three.",       cols: 5, rows:7,  numInitialSets: allValues.length,  setSize: 3, timeoutMs: 600_000 },
+    { instruction: "Match pairs!",               cols: 5, rows: 8,  numInitialSets: 40,  setSize: 2, timeoutMs: 30_000 },
+    { instruction: "Match sets of three!",       cols: 5, rows: 8,  numInitialSets: 80,  setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match pairs!",               cols: 7, rows: 10, numInitialSets: 100, setSize: 2, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!",       cols: 7, rows: 10, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!",       cols: 7, rows: 11, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!",       cols: 8, rows: 12, numInitialSets: 200, setSize: 3, timeoutMs: 60_000 },
 ];
 
 const levelsDesktop: LevelDef[] = [
-    { instruction: "Match  pairs.",               set, cols: 7, rows:7,  numInitialSets: emojiImgs.length,  setSize: 3, timeoutMs: 30_000 },
-    { instruction: "Match  pairs!",               set, cols: 21, rows: 14, numInitialSets: 2000,  setSize: 2, timeoutMs: 30_000 },
-    { instruction: "Match  sets of three!",       set, cols: 5, rows: 8,  numInitialSets: 80,  setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match pairs!",                set, cols: 7, rows: 10, numInitialSets: 100, setSize: 2, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!",        set, cols: 7, rows: 10, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!",        set, cols: 7, rows: 11, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!",        set, cols: 8, rows: 12, numInitialSets: 200, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match sets of three",        cols: 7, rows:7,  numInitialSets: allValues.length,  setSize: 3, timeoutMs: 600_000 },
+    { instruction: "Match pairs!",               cols: 21, rows: 14, numInitialSets: 2000,  setSize: 2, timeoutMs: 30_000 },
+    { instruction: "Match sets of three!",       cols: 5, rows: 8,  numInitialSets: 80,  setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match pairs!",               cols: 7, rows: 10, numInitialSets: 100, setSize: 2, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!",       cols: 7, rows: 10, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!",       cols: 7, rows: 11, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!",       cols: 8, rows: 12, numInitialSets: 200, setSize: 3, timeoutMs: 60_000 },
 ];
 
 const levels = screen.width > screen.height && screen.width >= 1280 ? levelsDesktop : levelsMobile; // Use desktop levels on larger screens
@@ -623,8 +638,8 @@ async function playLevel(idx: number): Promise<void> {
     if (idx < 0 || idx >= levels.length) {
         throw new RangeError(`Invalid level index ${idx}`);
     }
-    const { instruction, set, cols, rows, numInitialSets, setSize, timeoutMs } = levels[idx];
-    await level(idx, instruction, set, cols, rows, numInitialSets, setSize, timeoutMs);
+    const { instruction, cols, rows, numInitialSets, setSize, timeoutMs } = levels[idx];
+    await level(idx, instruction, cols, rows, numInitialSets, setSize, timeoutMs);
 }
 
 
@@ -677,6 +692,12 @@ if (!(isNaN(levelIndex) || levelIndex < 0 || levelIndex >= levels.length)) {
     SoundEffect["clock-tick"] = await getAudioBufferFromFile('/audio/clock_tick.wav');
 
     await showModalDialog("Ready to play?");
+    // Keep soundbars from going into standby mode by playing a very high frequency sound
+// https://www.reddit.com/r/Soundbars/comments/nyxpzp/soundbar_standby_blocker_prevent_soundbar_from/?utm_source=chatgpt.com
+    const oscTick = ctx.createOscillator();
+    oscTick.frequency.value = ctx.sampleRate / 2 - 2;  // Just below nyquist frequency
+    oscTick.connect(ctx.destination);
+    oscTick.start();
     for (;;)
         await playReachedLevel().catch(async (err) => {
             console.error("Game over or aborted:", err);
