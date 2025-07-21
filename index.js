@@ -67,6 +67,15 @@ async function level(levelIndex, instructions, cols, rows, timeoutMs = 3000) {
     let totalScore = 0;
     return new Promise((resolve, reject) => {
         const wordEl = document.querySelector('#word');
+        const tickEl = document.querySelector('.tick');
+        /// TODO: Make this do real stuff
+        tickEl.addEventListener('click', e => {
+            if (scoreEl.innerText != "No word") {
+                // User clicked the tick, so we assume they want to submit the word
+                wordEl.innerHTML = ""; // Clear the word
+                playSoundEffect("good");
+            }
+        });
         const grid_len = cols * rows;
         const columns = [];
         const setSizes = {};
@@ -80,17 +89,17 @@ async function level(levelIndex, instructions, cols, rows, timeoutMs = 3000) {
             for (const cell of wordCells) {
                 const letter = getTileElementLetter(cell);
                 if (letter) {
-                    word += letter == " " ? "" : letter; // Change blank tiles to wildcards
+                    word += letter == " " ? "?" : letter; // Change blank tiles to wildcards
                 }
             }
-            return word;
+            return word.toLowerCase();
         };
         const GetDictWord = (word) => {
             // Convert pattern to a regex: replace ? with .
             // Commented out is case-insensitive version
             // const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$', 'i');
             const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$');
-            const match = wordlist60.find(word => regex.test(word));
+            const match = WordList60.find(word => regex.test(word));
             console.log("GetDictWord", word, "=>", match);
             return match;
         };
