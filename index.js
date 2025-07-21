@@ -35,303 +35,230 @@ Object.defineProperty(Array.prototype, 'partition', {
         return partitions;
     }
 });
-async function level(levelIndex, instructions, cols, rows, numInitialSets, maxSetSize, timeoutMs = 3000) {
+// https://chatgpt.com/s/t_687e848ccd088191b6e279a5e4367855
+function FLIP(el, mutator, duration = 400) {
+    const first = el.getBoundingClientRect();
+    mutator(el);
+    const last = el.getBoundingClientRect();
+    const dx = first.left - last.left;
+    const dy = first.top - last.top;
+    el.style.transition = 'none';
+    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    void el.offsetWidth;
+    el.style.transition = `transform ${duration}ms cubic-bezier(.4,0,.2,1)`;
+    el.style.transform = '';
+    return new Promise(resolve => {
+        const cleanup = () => {
+            el.style.transition = '';
+            el.removeEventListener('transitionend', cleanup);
+            resolve();
+        };
+        el.addEventListener('transitionend', cleanup);
+    });
+}
+async function level(levelIndex, instructions, cols, rows, timeoutMs = 3000) {
     const scoreEl = document.querySelector('#score');
+    const deckEl = document.querySelector('.deck');
     // const timeoutActionType: "hint" | "add" | "remove" = setsToAddPerTimeout === 0 ? "hint" : setsToAddPerTimeout > 0 ? "add" : "remove"
-    // let foundAtLeastOneMatch = false; // We don't do the timeout action until the after the first successful match
     let setsRemaining = 0;
-    let lastMatchTime = 0;
+    let lastWordTime = 0;
     // Hack
     // let lock: boolean = false;
     let totalScore = 0;
     return new Promise((resolve, reject) => {
-        document.querySelector('#instructions').innerHTML = instructions;
+        const wordEl = document.querySelector('#word');
         const grid_len = cols * rows;
-        // create a grid
-        // const grid: number[] = new Array<number>(grid_len).fill(0)
-        const deck = Array.from({ length: grid_len }, () => []);
+        const columns = [];
         const setSizes = {};
-        let matchingCells = [];
+        let wordCells = [];
         let hintCells = []; // Cells that are currently being hinted at
         const i2rc = (i) => [Math.floor(i / cols), i % cols];
-        const topTiles = () => {
-            const tiles = new Array(grid_len).fill(undefined);
-            for (const el of document.querySelectorAll('.tile')) {
-                const [locS, zIndexS] = el.id.split('-');
-                const loc = parseInt(locS);
-                const zIndex = parseInt(zIndexS);
-                if (tiles[loc] === undefined || zIndex > parseInt(tiles[loc].id.split('-')[1]))
-                    tiles[loc] = el;
-            }
-            return tiles;
-        };
-        function findAVisibleSet() {
-            const sameValueIndexes = {};
-            for (let i = 0; i < deck.length; i++) {
-                const stack = deck[i];
-                if (stack.length === 0)
-                    continue;
-                const valueAtTopOfStack = stack[stack.length - 1];
-                if (!sameValueIndexes[valueAtTopOfStack])
-                    sameValueIndexes[valueAtTopOfStack] = [];
-                sameValueIndexes[valueAtTopOfStack].push(i);
-                if (sameValueIndexes[valueAtTopOfStack].length === setSizes[valueAtTopOfStack]) {
-                    return sameValueIndexes[valueAtTopOfStack].map(idx => index2TopTileElement(idx));
+        const candidateWord = () => {
+            let word = "";
+            // get the letters from word divs children
+            const wordCells = Array.from(wordEl.children);
+            for (const cell of wordCells) {
+                const letter = getTileElementLetter(cell);
+                if (letter) {
+                    word += letter == " " ? "" : letter; // Change blank tiles to wildcards
                 }
             }
-            return [];
-        }
-        const el2Index = (el) => {
-            return parseInt(el.dataset['index'] || '0');
+            return word;
         };
-        const index2Stack = (i) => {
-            return [...document.querySelectorAll(`.tile[data-index="${i}"]`)];
+        const GetDictWord = (word) => {
+            // Convert pattern to a regex: replace ? with .
+            // Commented out is case-insensitive version
+            // const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$', 'i');
+            const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$');
+            const match = wordlist60.find(word => regex.test(word));
+            console.log("GetDictWord", word, "=>", match);
+            return match;
         };
-        const index2TopTileElement = (i) => document.querySelector(`.tile[data-index="${i}"][data-stack-position="top"]`);
-        const index2BottomTileElement = (i) => document.querySelector(`.tile[data-index="${i}"][data-stack-position="bottom"]`);
-        const setTileElementValue = (tileEl, value) => {
-            tileEl.dataset['value'] = value;
-            if (!value) {
-                tileEl.innerHTML = '';
+        const index2TileElement = (i) => document.querySelector(`.scrabble-tile[data-index="${i}"]`);
+        const setTileElementLetter = (tileEl, letter) => {
+            tileEl.dataset['letter'] = tileEl.innerText = letter;
+            tileEl.dataset['value'] = `${scrabbleData[letter].value}`;
+            if (!letter) {
                 tileEl.style.display = 'none';
-                tileEl.dataset['setSize'] = '';
             }
             else {
-                tileEl.innerHTML = `<img src="imgs/${value}.png" alt="${value}">`;
-                tileEl.dataset['setSize'] = setSizes[value].toString();
                 tileEl.style.display = 'block';
-                tileEl.className = `tile set-size-${setSizes[tileEl.dataset['value']]}`; // Remove all animation classes
             }
         };
-        const getTileElementValue = (tileEl) => {
-            return tileEl.dataset['value'];
+        const getTileElementLetter = (tileEl) => {
+            return tileEl.dataset['letter'];
         };
-        const makeTileElementAtIndex = (i, isTop) => {
+        const getTileElementRowColumn = (tileEl) => {
+            const r = parseInt(tileEl.style.gridRow) - 1; // Convert to 0-based index
+            const c = parseInt(tileEl.style.gridColumn) - 1; // Convert to 0-based index
+            return [r, c];
+        };
+        const setTileElementRow = (tileEl, r) => {
+            tileEl.style.gridRow = `${r + 1}`; // Convert to 1-based index for CSS grid
+        };
+        const moveTileDownOneRow = (tileEl) => {
+            const [currentRow, currentCol] = getTileElementRowColumn(tileEl);
+            setTileElementRow(tileEl, currentRow + 1);
+        };
+        const moveTileUpOneRow = (tileEl) => {
+            const [currentRow, currentCol] = getTileElementRowColumn(tileEl);
+            setTileElementRow(tileEl, currentRow - 1);
+        };
+        const makeTileElementAtColumn = (c) => {
             // https://stackoverflow.com/questions/48419167/how-to-convert-one-emoji-character-to-unicode-codepoint-number-in-javascript
             // console.log([...v].map(e => e.codePointAt(0).toString(16)).join(`-`)) // gives correctly 1f469-200d-2695-fe0
             const tileEl = document.createElement('div');
-            const [r, c] = i2rc(i);
-            const zIndex = isTop ? 1001 : 1000;
-            tileEl.className = (`tile set-size-0`);
-            tileEl.style.zIndex = `${zIndex}`;
-            tileEl.id = `${i}-${zIndex - 1000}`;
-            tileEl.dataset['setSize'] = tileEl.dataset['setSize'];
-            tileEl.dataset['index'] = i.toString();
-            tileEl.dataset['stackPosition'] = isTop ? 'top' : 'bottom';
-            tileEl.dataset['value'] = "0";
-            tileEl.innerHTML = `<img src="" alt="">`;
-            tileEl.style.gridRow = `${r + 1}`;
-            tileEl.style.gridColumn = `${c + 1}`;
-            // tileEl.classList.add('fade-in', 'grow')
-            tileEl.onanimationend = () => {
-                tileEl.className = (`tile set-size-${setSizes[tileEl.dataset['value']]}`); // Remove all animation classes
-            };
-            tileEl.ontransitionend = () => {
-                if (tileEl.classList.contains('rotateOut'))
-                    // Update the display of the stack at this index. The deck will have been updated by the transitionstart handler
-                    displayStackAtIndex(i);
-                tileEl.className = (`tile set-size-${setSizes[tileEl.dataset['value']]}`); // Remove all animation classes
-            };
-            tileEl.ontransitionstart = () => {
-                if (tileEl.classList.contains('rotateOut'))
-                    deck[i].pop(); // Remove the top tile from the deck, we won't update the display until animation ends
+            tileEl.style.gridColumn = `${c + 1}`; // Convert to 1-based index for CSS grid
+            tileEl.className = (`scrabble-tile`); // Set the class to the default tile class
+            tileEl.dataset['letter'] = "";
+            tileEl.dataset['column'] = `${c}`;
+            tileEl.innerText = "";
+            tileEl.ontransitionend = tileEl.onanimationend = () => {
+                tileEl.className = (`scrabble-tile`); // Remove all animation classes
             };
             const touched = async (e) => {
                 e.preventDefault();
-                // if (lock)
-                //     return;
-                // lock = true;
-                for (const cell of hintCells) {
-                    cell.classList.remove('hint');
-                }
-                const tileValue = getTileElementValue(tileEl);
-                if (matchingCells.length == 0) {
-                    tileEl.classList.add("selected");
-                    playSoundEffect("selected");
-                    matchingCells.push(tileEl);
-                }
-                else if (!matchingCells.includes(tileEl) && tileValue === getTileElementValue(matchingCells[0])) {
-                    matchingCells.push(tileEl);
-                    tileEl.classList.add("selected");
-                    // Check if we have a match
-                    if (matchingCells.length == setSizes[tileValue]) {
-                        // We have a match
-                        let score = 0; // No score if timeout
-                        let msToFindMatch = Date.now() - lastMatchTime;
-                        if (msToFindMatch < 1000) {
-                            score = 100;
-                        }
-                        else if (msToFindMatch < 3000) {
-                            score = 25;
-                            // } else if (msToFindMatch < 5000) {
-                            //     score = 10;
-                        }
-                        else
-                            score = 10;
-                        totalScore += score;
-                        // foundAtLeastOneMatch = true;
-                        setsRemaining -= 1;
-                        if (score > 0) {
-                            const soundEffectName = score == 100 ? "excellent" : (score == 25 ? "good" : "selected3");
-                            // Don't await, these sounds take a long time to play
-                            playSoundEffect(soundEffectName);
-                        }
-                        scoreEl.innerHTML = `Level ${levelIndex + 1} - Score: ${totalScore.toFixed(0)}  (${setsRemaining.toFixed(0)})`;
-                        for (const cell of matchingCells) {
-                            cell.classList.add('rotateOut');
-                        }
-                        matchingCells = [];
-                        resetTimerBar();
-                        if (setsRemaining === 0) {
-                            // Level over
-                            resolve();
-                        }
+                e.stopPropagation();
+                const [_, tileCol] = getTileElementRowColumn(tileEl);
+                // if the parent element is the wordEl, then we are moving the tile back to the deck
+                if (tileEl.parentElement === wordEl) {
+                    // only allow touch events for the second-to-last child of the wordEl
+                    if (tileEl != wordEl.lastElementChild) {
+                        playSoundEffect("deselected");
+                        return;
                     }
-                    else { // Not a match yet
-                        playSoundEffect(matchingCells.length == 2 ? "selected2" : "selected3");
+                    const cellsToMove = Array.from(document.querySelectorAll('.scrabble-tile'))
+                        .filter(cell => {
+                        const computedStyle = window.getComputedStyle(cell);
+                        const col = parseInt(computedStyle.gridColumnStart, 10);
+                        return col === tileCol + 1;
+                    });
+                    for (const cell of cellsToMove) {
+                        FLIP(cell, (el) => {
+                            moveTileUpOneRow(el);
+                        });
                     }
+                    // Move the tile back to the deck
+                    FLIP(tileEl, (el) => { deckEl.appendChild(el); });
+                    scoreEl.innerHTML = GetDictWord(candidateWord()) || "No word";
+                    return;
                 }
-                else {
-                    for (const cell of matchingCells) {
-                        cell.classList.remove("selected");
-                        cell.classList.add('rotateBack');
-                    }
-                    matchingCells = [];
-                    tileEl.classList.add("rotateBack");
+                // only allow touch events for tiles on the last row of the deck
+                if (parseInt(getComputedStyle(tileEl).gridRowStart, 10) != rows) {
                     playSoundEffect("deselected");
+                    return;
+                }
+                FLIP(tileEl, (el) => { wordEl.appendChild(tileEl); });
+                scoreEl.innerHTML = GetDictWord(candidateWord()) || "No word";
+                // select all tiles in the same column using their gridColmumn style as selector
+                const cellsToMove = Array.from(document.querySelectorAll('.scrabble-tile'))
+                    .filter(cell => {
+                    const computedStyle = window.getComputedStyle(cell);
+                    const col = parseInt(computedStyle.gridColumnStart, 10);
+                    return col === tileCol + 1;
+                });
+                for (const cell of cellsToMove) {
+                    FLIP(cell, (el) => {
+                        moveTileDownOneRow(el);
+                    });
+                }
+                for (const cell of wordCells) {
+                    cell.classList.remove('rotateOut');
+                }
+                // wordCells.push(tileEl);
+                tileEl.classList.add("selected");
+                const madeWord = (cells) => false;
+                if (madeWord(wordCells)) {
+                    // We have a match
+                    let score = 0; // No score if timeout
+                    let msToFindWord = Date.now() - lastWordTime;
+                    if (msToFindWord < 1000) {
+                        score = 100;
+                    }
+                    else if (msToFindWord < 3000) {
+                        score = 25;
+                        // } else if (msToFindWord < 5000) {
+                        //     score = 10;
+                    }
+                    else
+                        score = 10;
+                    totalScore += score;
+                    if (score > 0) {
+                        const soundEffectName = score == 100 ? "excellent" : (score == 25 ? "good" : "selected3");
+                        // Don't await, these sounds take a long time to play
+                        playSoundEffect(soundEffectName);
+                    }
+                    scoreEl.innerHTML = `Level ${levelIndex + 1} - Score: ${totalScore.toFixed(0)}  (${setsRemaining.toFixed(0)})`;
+                    for (const cell of wordCells) {
+                        cell.classList.add('rotateOut');
+                    }
+                    wordCells = [];
+                    resetTimerBar();
+                    if (setsRemaining === 0) {
+                        // Level over
+                        resolve();
+                    }
+                }
+                else { // Not a word yet
+                    playSoundEffect(wordCells.length == 2 ? "selected2" : "selected3");
                 }
                 // lock = false;
             };
-            // Add event listeners for touch and mouse events if this is the top tile in the stack
-            if (isTop) {
-                tileEl.addEventListener('mousedown', touched);
-                tileEl.addEventListener('touchstart', touched);
-            }
+            tileEl.addEventListener('mousedown', touched);
+            tileEl.addEventListener('touchstart', touched);
             return tileEl;
         };
-        const userFoundMatchBeforeTimeout = () => {
-            return Date.now() - lastMatchTime < timeoutMs;
+        const userFoundWordBeforeTimeout = () => {
+            return Date.now() - lastWordTime < timeoutMs;
         };
         const timeoutAction = () => {
             // Find a set of tiles and animate them as a hint
-            if (!userFoundMatchBeforeTimeout()) {
-                // HACK (shouldn't occur) - remove any tiles still with the "hint" class
-                document.querySelectorAll('.tile.hint')
-                    .forEach(el => el.classList.remove('hint'));
-                hintCells = findAVisibleSet(); // will always find one
-                // console.assert(s.length >= setSize, "There should always be a set of size " + setSize + " visible at this point")
-                for (const cell of hintCells)
-                    // console.log(cell.classList)
-                    cell.classList.add('hint');
+            if (!userFoundWordBeforeTimeout()) {
                 showModalDialog("Too slow!").then(() => { reject(); });
             }
         };
-        const makeEmptyDeck = () => {
-            const deckEl = document.querySelector('.deck');
+        const initialDeal = () => {
             // const audioElGood = document.querySelector('#audio_match_good') as HTMLAudioElement;
             // const audioElOk = document.querySelector('#audio_match_ok') as HTMLAudioElement;
             // Make deck
             deckEl.innerHTML = "";
-            deckEl.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
-            deckEl.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
-            deckEl.style.aspectRatio = `${cols} / ${rows}`; // Set aspect ratio of deck
-            // For each grid position, create a pile of two tiles, one on top of the other
-            for (let i = 0; i < grid_len; ++i) {
-                deckEl.appendChild(makeTileElementAtIndex(i, true));
-                deckEl.appendChild(makeTileElementAtIndex(i, false));
-            }
-        };
-        const displayStackAtIndex = (i) => {
-            const stack = deck[i];
-            const bottomTile = index2BottomTileElement(i);
-            const topTile = index2TopTileElement(i);
-            setTileElementValue(bottomTile, stack.length >= 2 ? stack[stack.length - 2] : '');
-            setTileElementValue(topTile, stack.length >= 1 ? stack[stack.length - 1] : '');
-        };
-        const displayDeck = () => {
-            for (let i = 0; i < deck.length; ++i)
-                displayStackAtIndex(i);
-        };
-        const getNewTileValue = (() => {
-            let _idx = 0;
-            return () => {
-                if (_idx >= allValues.length)
-                    _idx = 0;
-                return allValues[_idx++];
-            };
-        })();
-        let no_more_empty_stacks = false; // If true, don't search for empty stacks anymore when dealing a new set (speed optimization)
-        const dealSet = (setSize, toTheBottom = false) => {
-            const value = getNewTileValue();
-            setSizes[value] = setSize;
-            // get candidate grid positions, initially all grid positions
-            // Filter out indexes of stacks that contain a tile with this value
-            let candidateDeckIndexes = [...Array(deck.length).keys()];
-            /**
-             * Chooses a deck index for a new set:
-             * - If any deck positions have zero tiles, returns one of those at random.
-             * - Otherwise, returns a random position from all grid slots.
-             * returns the index of the deck index in candidateDeckIndexes!!
-             * Be careful to distinguish between the index in the deck and the index in candidateDeckIndexes:
-             * deck[candidateDeckIndexes[index]] is the tile stack at that index in the deck.
-             */
-            const getIndexForNewTile = () => {
-                // Make sure we don't deal the same tile to a stack that already has this tile, guaranteeing that the no tiles with the same value will ever be in the same stack
-                candidateDeckIndexes = candidateDeckIndexes.filter(i => {
-                    const stack = deck[i];
-                    return stack.length === 0 || !stack.includes(value);
-                });
-                const initialCandidateIndex = candidateDeckIndexes.randomIndex();
-                if (!no_more_empty_stacks) {
-                    // from this index, search for the first deck position with zero tiles forward...
-                    for (let i = initialCandidateIndex; i < candidateDeckIndexes.length; i++) {
-                        if (deck[candidateDeckIndexes[i]].length === 0)
-                            return i;
-                    }
-                    // ...and if not found, search backwards
-                    for (let i = initialCandidateIndex - 1; i >= 0; i--) {
-                        if (deck[candidateDeckIndexes[i]].length === 0)
-                            return i;
-                    }
-                    // If we didn't find any empty stacks, set the flag so we don't search for empty stacks again
-                    no_more_empty_stacks = true;
+            deckEl.style.gridTemplateColumns = `repeat(10, minmax(0, 1fr))`;
+            deckEl.style.gridTemplateRows = `repeat(10, minmax(0, 1fr))`;
+            deckEl.style.aspectRatio = `1 / 1`; // Set aspect ratio of deck
+            ScrabbleLetters.shuffle();
+            for (let c = 0; c < 10; ++c) {
+                columns[c] = [];
+                for (let r = 0; r < rows; ++r) {
+                    const i = c * rows + r;
+                    const tileEl = makeTileElementAtColumn(c);
+                    deckEl.appendChild(tileEl);
+                    setTileElementRow(tileEl, r);
+                    setTileElementLetter(tileEl, ScrabbleLetters.pop());
+                    columns[c].push(getTileElementLetter(tileEl));
                 }
-                // otherwise, return a random index from the candidates
-                return initialCandidateIndex;
-            };
-            for (let i = 0; i < setSize; ++i) {
-                const indexOfCandidate = getIndexForNewTile();
-                // Add a new tile to the deck at the candidate index
-                const indexInDeck = candidateDeckIndexes[indexOfCandidate];
-                if (toTheBottom)
-                    deck[indexInDeck].unshift(value); // Add to the bottom of the stack
-                else
-                    deck[indexInDeck].push(value);
-            }
-            ++setsRemaining;
-            scoreEl.innerHTML = `Level ${levelIndex + 1} - Score: ${totalScore.toFixed(0)}  (${setsRemaining.toFixed(0)})`;
-        };
-        const initialDeal = () => {
-            setTimerBarTransitionTime(864_000_000); // 1 day, so it doesn't animate
-            resetTimerBar();
-            // remove any tiles that were hinted at in a previous level (should not happen)
-            // document.querySelectorAll<HTMLDivElement>('.tile.hint')
-            //     .forEach(el => el.classList.remove('hint'));
-            no_more_empty_stacks = false; // Reset the flag so we search for empty stacks again
-            for (let setNum = 0; setNum < numInitialSets; ++setNum) {
-                let setSize = 2;
-                const r = Math.floor(Math.random() * 100);
-                if (r < 1) {
-                    setSize = 5; //
-                }
-                else if (r < 100) {
-                    setSize = 3;
-                }
-                dealSet(setSize);
             }
             setTimerBarTransitionTime(timeoutMs);
             resetTimerBar();
-            displayDeck();
         };
         const resetTimerBar = () => {
             const onBarEnd = () => {
@@ -349,12 +276,11 @@ async function level(levelIndex, instructions, cols, rows, numInitialSets, maxSe
             fill.classList.add('animate');
             fill.addEventListener('animationend', onBarEnd, { once: true });
             // fill.addEventListener('animationend', () => alert("Foo"), {once: true});
-            lastMatchTime = Date.now();
+            lastWordTime = Date.now();
         };
         const setTimerBarTransitionTime = (milliSeconds) => {
             document.documentElement.style.setProperty('--TRANSITION_TIME', `${milliSeconds / 1000}s`);
         };
-        makeEmptyDeck();
         initialDeal();
     });
 }
@@ -436,8 +362,41 @@ function getBlip(frequency, risingDuration, fallingDuration) {
     }
     return buffer;
 }
-// Example usage: 440 Hz, 0.1s rise, 0.2s fall
-const allValues = emojiImgs.shuffle();
+const scrabbleData = {
+    A: { letter: 'A', value: 1, frequency: 9 },
+    B: { letter: 'B', value: 3, frequency: 2 },
+    C: { letter: 'C', value: 3, frequency: 2 },
+    D: { letter: 'D', value: 2, frequency: 4 },
+    E: { letter: 'E', value: 1, frequency: 12 },
+    F: { letter: 'F', value: 4, frequency: 2 },
+    G: { letter: 'G', value: 2, frequency: 3 },
+    H: { letter: 'H', value: 4, frequency: 2 },
+    I: { letter: 'I', value: 1, frequency: 9 },
+    J: { letter: 'J', value: 8, frequency: 1 },
+    K: { letter: 'K', value: 5, frequency: 1 },
+    L: { letter: 'L', value: 1, frequency: 4 },
+    M: { letter: 'M', value: 3, frequency: 2 },
+    N: { letter: 'N', value: 1, frequency: 6 },
+    O: { letter: 'O', value: 1, frequency: 8 },
+    P: { letter: 'P', value: 3, frequency: 2 },
+    Q: { letter: 'Q', value: 10, frequency: 1 },
+    R: { letter: 'R', value: 1, frequency: 6 },
+    S: { letter: 'S', value: 1, frequency: 4 },
+    T: { letter: 'T', value: 1, frequency: 6 },
+    U: { letter: 'U', value: 1, frequency: 4 },
+    V: { letter: 'V', value: 4, frequency: 2 },
+    W: { letter: 'W', value: 4, frequency: 2 },
+    X: { letter: 'X', value: 8, frequency: 1 },
+    Y: { letter: 'Y', value: 4, frequency: 2 },
+    Z: { letter: 'Z', value: 10, frequency: 1 },
+    " ": { letter: ' ', value: 0, frequency: 2 } // Blank tile
+};
+const ScrabbleLetters = [];
+Object.values(scrabbleData).forEach(tile => {
+    for (let i = 0; i < tile.frequency; i++) {
+        ScrabbleLetters.push(tile.letter);
+    }
+});
 const modalDialog = document.querySelector('.modal');
 const modalDialogMessage = document.querySelector('.modal_message');
 const modalDialogOkButton = document.querySelector('.modal__ok');
@@ -450,22 +409,22 @@ const showModalDialog = async (message) => {
     });
 };
 const levelsMobile = [
-    { instruction: "Match sets of three.", cols: 5, rows: 7, numInitialSets: allValues.length, setSize: 3, timeoutMs: 600_000 },
-    { instruction: "Match pairs!", cols: 5, rows: 8, numInitialSets: 40, setSize: 2, timeoutMs: 30_000 },
-    { instruction: "Match sets of three!", cols: 5, rows: 8, numInitialSets: 80, setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match pairs!", cols: 7, rows: 10, numInitialSets: 100, setSize: 2, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!", cols: 7, rows: 10, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!", cols: 7, rows: 11, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!", cols: 8, rows: 12, numInitialSets: 200, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match sets of three.", cols: 5, rows: 7, timeoutMs: 600_000 },
+    { instruction: "Match pairs!", cols: 5, rows: 8, timeoutMs: 30_000 },
+    { instruction: "Match sets of three!", cols: 5, rows: 8, timeoutMs: 60_000 },
+    { instruction: "Match pairs!", cols: 7, rows: 10, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!", cols: 7, rows: 10, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!", cols: 7, rows: 11, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!", cols: 8, rows: 12, timeoutMs: 60_000 },
 ];
 const levelsDesktop = [
-    { instruction: "Match sets of three", cols: 9, rows: 9, numInitialSets: allValues.length, setSize: 3, timeoutMs: 600_000 },
-    { instruction: "Match pairs!", cols: 21, rows: 14, numInitialSets: 2000, setSize: 2, timeoutMs: 30_000 },
-    { instruction: "Match sets of three!", cols: 5, rows: 8, numInitialSets: 80, setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match pairs!", cols: 7, rows: 10, numInitialSets: 100, setSize: 2, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!", cols: 7, rows: 10, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!", cols: 7, rows: 11, numInitialSets: 100, setSize: 3, timeoutMs: 60_000 },
-    { instruction: "Match sets of three!", cols: 8, rows: 12, numInitialSets: 200, setSize: 3, timeoutMs: 60_000 },
+    { instruction: "Match sets of three", cols: 10, rows: 10, timeoutMs: 600_000 },
+    { instruction: "Match pairs!", cols: 21, rows: 14, timeoutMs: 30_000 },
+    { instruction: "Match sets of three!", cols: 5, rows: 8, timeoutMs: 60_000 },
+    { instruction: "Match pairs!", cols: 7, rows: 10, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!", cols: 7, rows: 10, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!", cols: 7, rows: 11, timeoutMs: 60_000 },
+    { instruction: "Match sets of three!", cols: 8, rows: 12, timeoutMs: 60_000 },
 ];
 const levels = screen.width > screen.height && screen.width >= 1280 ? levelsDesktop : levelsMobile; // Use desktop levels on larger screens
 // 2) playLevel() simply looks up and invokes level():
@@ -473,8 +432,8 @@ async function playLevel(idx) {
     if (idx < 0 || idx >= levels.length) {
         throw new RangeError(`Invalid level index ${idx}`);
     }
-    const { instruction, cols, rows, numInitialSets, setSize, timeoutMs } = levels[idx];
-    await level(idx, instruction, cols, rows, numInitialSets, setSize, timeoutMs);
+    const { instruction, cols, rows, timeoutMs } = levels[idx];
+    await level(idx, instruction, cols, rows, timeoutMs);
 }
 /**
  * Retrieve the persisted reached level (defaulting to 0).
@@ -505,8 +464,8 @@ async function playReachedLevel() {
         // throw err;  // rethrow if you want callers to handle it
     }
 }
-const strLevel = prompt(`Level: (0-${levels.length - 1})\n\n:`, getReachedLevel().toString());
-const levelIndex = strLevel !== null ? parseInt(strLevel, 10) : 0;
+// const strLevel =    prompt(`Level: (0-${levels.length-1})\n\n:`, getReachedLevel().toString());
+const levelIndex = 0; // strLevel !== null ? parseInt(strLevel, 10) : 0;
 if (!(isNaN(levelIndex) || levelIndex < 0 || levelIndex >= levels.length)) {
     setReachedLevel(levelIndex); // Reset reached level to 0 on startup
 }
@@ -520,17 +479,13 @@ if (!(isNaN(levelIndex) || levelIndex < 0 || levelIndex >= levels.length)) {
     SoundEffect["excellent"] = await getAudioBufferFromFile('/audio/match_excellent.mp3');
     SoundEffect["ok"] = await getAudioBufferFromFile('/audio/match_ok.mp3');
     SoundEffect["clock-tick"] = await getAudioBufferFromFile('/audio/clock_tick.wav');
-    await showModalDialog("Ready to play?");
+    // await showModalDialog("Ready to play?");
     // Keep soundbars from going into standby mode by playing a very high frequency sound
     // https://www.reddit.com/r/Soundbars/comments/nyxpzp/soundbar_standby_blocker_prevent_soundbar_from/?utm_source=chatgpt.com
     const oscTick = ctx.createOscillator();
     oscTick.frequency.value = ctx.sampleRate / 2 - 2; // Just below nyquist frequency
     oscTick.connect(ctx.destination);
     oscTick.start();
-    for (;;)
-        await playReachedLevel().catch(async (err) => {
-            console.error("Game over or aborted:", err);
-            await showModalDialog("Game over!  Try again?");
-        });
+    await playReachedLevel();
 })();
 //# sourceMappingURL=index.js.map
