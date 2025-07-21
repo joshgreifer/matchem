@@ -319,7 +319,14 @@ async function level(levelIndex, instructions, cols, rows, numInitialSets, maxSe
             //     .forEach(el => el.classList.remove('hint'));
             no_more_empty_stacks = false; // Reset the flag so we search for empty stacks again
             for (let setNum = 0; setNum < numInitialSets; ++setNum) {
-                const setSize = [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 5].randomElement();
+                let setSize = 2;
+                const r = Math.floor(Math.random() * 100);
+                if (r < 1) {
+                    setSize = 5; //
+                }
+                else if (r < 100) {
+                    setSize = 3;
+                }
                 dealSet(setSize);
             }
             setTimerBarTransitionTime(timeoutMs);
@@ -452,7 +459,7 @@ const levelsMobile = [
     { instruction: "Match sets of three!", cols: 8, rows: 12, numInitialSets: 200, setSize: 3, timeoutMs: 60_000 },
 ];
 const levelsDesktop = [
-    { instruction: "Match sets of three", cols: 7, rows: 7, numInitialSets: allValues.length, setSize: 3, timeoutMs: 600_000 },
+    { instruction: "Match sets of three", cols: 9, rows: 9, numInitialSets: allValues.length, setSize: 3, timeoutMs: 600_000 },
     { instruction: "Match pairs!", cols: 21, rows: 14, numInitialSets: 2000, setSize: 2, timeoutMs: 30_000 },
     { instruction: "Match sets of three!", cols: 5, rows: 8, numInitialSets: 80, setSize: 3, timeoutMs: 60_000 },
     { instruction: "Match pairs!", cols: 7, rows: 10, numInitialSets: 100, setSize: 2, timeoutMs: 60_000 },
