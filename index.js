@@ -57,31 +57,27 @@ function FLIP(el, mutator, duration = 400) {
     });
 }
 async function level(levelIndex, instructions, cols, rows, timeoutMs = 3000) {
-    const scoreEl = document.querySelector('#score');
+    const lookedUpWord = document.querySelector('#looked-up-word');
     const deckEl = document.querySelector('.deck');
     // const timeoutActionType: "hint" | "add" | "remove" = setsToAddPerTimeout === 0 ? "hint" : setsToAddPerTimeout > 0 ? "add" : "remove"
     let setsRemaining = 0;
     let lastWordTime = 0;
-    // Hack
-    // let lock: boolean = false;
-    let totalScore = 0;
     return new Promise((resolve, reject) => {
         const wordEl = document.querySelector('#word');
         const tickEl = document.querySelector('.tick');
         /// TODO: Make this do real stuff
         tickEl.addEventListener('click', e => {
-            if (scoreEl.innerText != "No word") {
+            if (lookedUpWord.innerText != "") {
                 // User clicked the tick, so we assume they want to submit the word
                 wordEl.innerHTML = ""; // Clear the word
-                playSoundEffect("good");
+                UpdateWordMade();
+                playSoundEffect("selected3");
+                resetTimerBar();
+                if (deckEl.children.length == 0)
+                    // All tiles are used up, so we resolve the promise
+                    resolve();
             }
         });
-        const grid_len = cols * rows;
-        const columns = [];
-        const setSizes = {};
-        let wordCells = [];
-        let hintCells = []; // Cells that are currently being hinted at
-        const i2rc = (i) => [Math.floor(i / cols), i % cols];
         const candidateWord = () => {
             let word = "";
             // get the letters from word divs children
@@ -99,14 +95,23 @@ async function level(levelIndex, instructions, cols, rows, timeoutMs = 3000) {
             // Commented out is case-insensitive version
             // const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$', 'i');
             const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$');
-            const match = WordList60.find(word => regex.test(word));
+            const match = WordList70.find(word => regex.test(word));
             console.log("GetDictWord", word, "=>", match);
             return match;
         };
-        const index2TileElement = (i) => document.querySelector(`.scrabble-tile[data-index="${i}"]`);
+        const UpdateWordMade = () => {
+            const madeWord = GetDictWord(candidateWord()) || "";
+            if (madeWord === "" || madeWord.length < 3) {
+                tickEl.classList.remove('hint');
+            }
+            else {
+                tickEl.classList.add('hint');
+            }
+            lookedUpWord.innerHTML = madeWord;
+        };
         const setTileElementLetter = (tileEl, letter) => {
             tileEl.dataset['letter'] = tileEl.innerText = letter;
-            tileEl.dataset['value'] = `${scrabbleData[letter].value}`;
+            tileEl.dataset['value'] = `${scrabbleData[letter].value || ""}`;
             if (!letter) {
                 tileEl.style.display = 'none';
             }
@@ -126,11 +131,11 @@ async function level(levelIndex, instructions, cols, rows, timeoutMs = 3000) {
             tileEl.style.gridRow = `${r + 1}`; // Convert to 1-based index for CSS grid
         };
         const moveTileDownOneRow = (tileEl) => {
-            const [currentRow, currentCol] = getTileElementRowColumn(tileEl);
+            const [currentRow, _] = getTileElementRowColumn(tileEl);
             setTileElementRow(tileEl, currentRow + 1);
         };
         const moveTileUpOneRow = (tileEl) => {
-            const [currentRow, currentCol] = getTileElementRowColumn(tileEl);
+            const [currentRow, _] = getTileElementRowColumn(tileEl);
             setTileElementRow(tileEl, currentRow - 1);
         };
         const makeTileElementAtColumn = (c) => {
@@ -153,7 +158,7 @@ async function level(levelIndex, instructions, cols, rows, timeoutMs = 3000) {
                 if (tileEl.parentElement === wordEl) {
                     // only allow touch events for the second-to-last child of the wordEl
                     if (tileEl != wordEl.lastElementChild) {
-                        playSoundEffect("deselected");
+                        playSoundEffect("undo");
                         return;
                     }
                     const cellsToMove = Array.from(document.querySelectorAll('.scrabble-tile'))
@@ -169,16 +174,16 @@ async function level(levelIndex, instructions, cols, rows, timeoutMs = 3000) {
                     }
                     // Move the tile back to the deck
                     FLIP(tileEl, (el) => { deckEl.appendChild(el); });
-                    scoreEl.innerHTML = GetDictWord(candidateWord()) || "No word";
+                    UpdateWordMade();
                     return;
                 }
                 // only allow touch events for tiles on the last row of the deck
                 if (parseInt(getComputedStyle(tileEl).gridRowStart, 10) != rows) {
-                    playSoundEffect("deselected");
+                    playSoundEffect("undo");
                     return;
                 }
-                FLIP(tileEl, (el) => { wordEl.appendChild(tileEl); });
-                scoreEl.innerHTML = GetDictWord(candidateWord()) || "No word";
+                await FLIP(tileEl, (el) => { wordEl.appendChild(el); }, 100);
+                UpdateWordMade();
                 // select all tiles in the same column using their gridColmumn style as selector
                 const cellsToMove = Array.from(document.querySelectorAll('.scrabble-tile'))
                     .filter(cell => {
@@ -191,47 +196,6 @@ async function level(levelIndex, instructions, cols, rows, timeoutMs = 3000) {
                         moveTileDownOneRow(el);
                     });
                 }
-                for (const cell of wordCells) {
-                    cell.classList.remove('rotateOut');
-                }
-                // wordCells.push(tileEl);
-                tileEl.classList.add("selected");
-                const madeWord = (cells) => false;
-                if (madeWord(wordCells)) {
-                    // We have a match
-                    let score = 0; // No score if timeout
-                    let msToFindWord = Date.now() - lastWordTime;
-                    if (msToFindWord < 1000) {
-                        score = 100;
-                    }
-                    else if (msToFindWord < 3000) {
-                        score = 25;
-                        // } else if (msToFindWord < 5000) {
-                        //     score = 10;
-                    }
-                    else
-                        score = 10;
-                    totalScore += score;
-                    if (score > 0) {
-                        const soundEffectName = score == 100 ? "excellent" : (score == 25 ? "good" : "selected3");
-                        // Don't await, these sounds take a long time to play
-                        playSoundEffect(soundEffectName);
-                    }
-                    scoreEl.innerHTML = `Level ${levelIndex + 1} - Score: ${totalScore.toFixed(0)}  (${setsRemaining.toFixed(0)})`;
-                    for (const cell of wordCells) {
-                        cell.classList.add('rotateOut');
-                    }
-                    wordCells = [];
-                    resetTimerBar();
-                    if (setsRemaining === 0) {
-                        // Level over
-                        resolve();
-                    }
-                }
-                else { // Not a word yet
-                    playSoundEffect(wordCells.length == 2 ? "selected2" : "selected3");
-                }
-                // lock = false;
             };
             tileEl.addEventListener('mousedown', touched);
             tileEl.addEventListener('touchstart', touched);
@@ -256,14 +220,12 @@ async function level(levelIndex, instructions, cols, rows, timeoutMs = 3000) {
             deckEl.style.aspectRatio = `1 / 1`; // Set aspect ratio of deck
             ScrabbleLetters.shuffle();
             for (let c = 0; c < 10; ++c) {
-                columns[c] = [];
                 for (let r = 0; r < rows; ++r) {
                     const i = c * rows + r;
                     const tileEl = makeTileElementAtColumn(c);
                     deckEl.appendChild(tileEl);
                     setTileElementRow(tileEl, r);
                     setTileElementLetter(tileEl, ScrabbleLetters.pop());
-                    columns[c].push(getTileElementLetter(tileEl));
                 }
             }
             setTimerBarTransitionTime(timeoutMs);
@@ -298,7 +260,7 @@ const SoundEffect = {
     "selected": undefined,
     "selected2": undefined,
     "selected3": undefined,
-    "deselected": undefined,
+    "undo": undefined,
     "good": undefined,
     "excellent": undefined,
     "ok": undefined
@@ -483,7 +445,7 @@ if (!(isNaN(levelIndex) || levelIndex < 0 || levelIndex >= levels.length)) {
     SoundEffect["selected"] = getBlip(1000, 0.01, 0.03);
     SoundEffect["selected2"] = getBlip(1250, 0.01, 0.03);
     SoundEffect["selected3"] = getBlip(1500, 0.01, 0.03);
-    SoundEffect["deselected"] = getBlip(200, 0.01, 0.05);
+    SoundEffect["undo"] = getBlip(200, 0.01, 0.05);
     SoundEffect["good"] = await getAudioBufferFromFile('/audio/match_good.mp3');
     SoundEffect["excellent"] = await getAudioBufferFromFile('/audio/match_excellent.mp3');
     SoundEffect["ok"] = await getAudioBufferFromFile('/audio/match_ok.mp3');

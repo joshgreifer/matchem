@@ -13,12 +13,12 @@
             /*  Globally used vars */
             --backgound-edge-color: #616161;
             --background-middle-color: #ffffff;
-            --game-background-color: #616161;
+            --game-background-color: #303030;
             --tile-background-color: #ffffff;
             --text-color: #ffffff;
             --dialog-background-color: #025771;
             --TRANSITION_TIME: 86400s;
-
+            --TILE_SIZE: 64px;
         }
         div {
             /*border: 1px solid var(--backgound-edge-color);*/
@@ -106,13 +106,7 @@
                 }
 
          */
-        @keyframes fade-in {
-            from { opacity: 0.2; }
-            to { opacity: 1; }
-        }
-        @keyframes grow {
-            from { scale: .2; }
-        }
+
         div {
             -moz-user-select: none;
             -html-user-select: none;
@@ -138,19 +132,13 @@
 
         }
         .deck {
-            /*border: 1px solid red;*/
 
-            /*top: 0;*/
-            /*max-width: 95vw;                            !* clear any previous max-width *!*/
-            /*max-height: calc(90vh - 100px);                           !* clear any previous max-height *!*/
-            /*min-height: calc(90vh - 100px);*/
-            height: 80vh;
             display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            grid-template-rows: repeat(10, 1fr);
             position: relative;
             background-color: var(--game-background-color);
-            /* keep container-type if you rely on container queries elsewhere */
-            container-type: inline-size;
-            place-items: stretch;
+
         }
         div#controls {
             justify-content: normal;
@@ -198,10 +186,11 @@
             }
         }
 
-        div#score {
+        div#looked-up-word {
             grid-area: score;
         }
-        .score-word-row {
+        
+        .build-word {
             grid-area: word;
             display: flex;
 
@@ -225,21 +214,22 @@
         .scrabble-tile {
             display: inline-block;
             position: relative;
-            width: 64px;
-            height: 64px;
+            margin: 2px;
+            width: var(--TILE_SIZE);
+            height: var(--TILE_SIZE);
             background: linear-gradient(145deg, #f5e8cb 60%, #d9c08b 100%);
-            border-radius: 10px;
+            border-radius: 3px;
             box-shadow:
-                    0 2px 6px 0 #bfa97c,       /* outer shadow */
-                    inset 2px 2px 6px #fff8e1, /* highlight */
-                    inset -3px -3px 8px #bda875; /* bevel/dark */
+                    0 2px 4px 0 #bfa97c,       /* outer shadow */
+                    inset 2px 2px 4px #fff8e1, /* highlight */
+                    inset -2px -2px 4px #bda875; /* bevel/dark */
             border: 1px solid #b29e6b;
             font-family: 'Roboto', Arial, Verdana, sans-serif;
             font-weight: bold;
             color: #42361e;
             text-align: center;
-            line-height: 64px;
-            font-size: 2.8rem;
+            line-height: var(--TILE_SIZE);
+            font-size: 40px;
             user-select: none;
         }
         .scrabble-tile::after {
@@ -249,9 +239,9 @@
             right: 10px;
             font-size: .75rem;
             font-family: 'Roboto', Arial, Verdana, sans-serif;
-            color: #695329;
+            color: #392c17;
             font-weight: bold;
-            opacity: 0.82;
+            /*opacity: 0.82;*/
             line-height: 1;
         }
 
@@ -260,17 +250,7 @@
         }
         /* Force every tile to be a square */
 
-        div.tile:hover {
-            /*background-color: #ecdc74;*/
-            cursor: grabbing;
-        }
 
-        div.tile img  {
-            filter: drop-shadow(2px 2px 4px #c1b585);
-            width: 94%;
-            object-fit: contain;
-
-        }
 
         div.rotateOut {
             transform: rotateY(90deg);
@@ -283,24 +263,23 @@
         }
 
         .tick {
-            /*margin-left: auto;*/
+            display: none;
+        }
+
+        @keyframes hintCycle {
+
+            0%   { transform: scale(100%); }
+            50% { transform: scale(200%); }
+            100% { transform: scale(100%); }
+         }
+
+        .tick.hint {
+            display: inline-block;
             color: green;
             cursor: pointer;
             font-size: 1.5em;
             user-select: none;
-        }
-        .tick.disabled {
-            color: #3e3e3e;
-        }
-        @keyframes hintCycle {
-
-            0%   { transform: rotateY(0deg); }
-            12% { transform: rotateY(-360deg); }
-            100% { transform: rotateY(-360deg); }
-         }
-
-        div.hint {
-            animation: hintCycle 5s linear infinite !important;
+            animation: hintCycle .5s ease-in-out infinite;
         }
 
         div.fadeIn {
@@ -320,8 +299,8 @@
         <div id="timer-bar">
             <div class="timer-fill"></div>
         </div>
-        <div id="score"></div>
-        <div class="score-word-row">
+        <div id="looked-up-word"></div>
+        <div class="build-word">
             <div id="word"></div>
             <span class="tick" title="Confirm">&#x2714;</span>
         </div>
@@ -338,6 +317,6 @@
 
 
 </body>
-<script src="assets/wordlist/up-to-60.js"></script>
+<script src="assets/wordlist/wordlist.js"></script>
 <script src="index.js"></script>
 </html>
