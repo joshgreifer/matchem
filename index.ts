@@ -5,7 +5,7 @@ interface Array<T> {
     shuffle(): Array<T>;
     partition<T>(filter: (item: T, index?: number, array?: Array<T>) => string | number): { [key: string]: Array<T> };
 }
-
+declare const WordList70: string[];
 Object.defineProperty(Array.prototype, 'randomIndex', {
     value: function () {
         return this.length ? Math.floor(Math.random() * this.length) : undefined;
@@ -156,6 +156,7 @@ async function level(levelIndex: number, instructions: string, cols: number, row
             // Commented out is case-insensitive version
             // const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$', 'i');
             const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$');
+
 
             const match = WordList70.find(word => regex.test(word));
             console.log("GetDictWord", word, "=>", match);

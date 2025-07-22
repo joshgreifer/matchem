@@ -202,11 +202,12 @@
             margin-top: 0.5em;
         }
         div#word {
+            width:calc(10 * var(--TILE_SIZE));
             display: flex;
             flex-direction: row;
             align-items: center;   /* Optional: vertically center the tiles */
             justify-content: flex-start; /* Optional: align left */
-            gap: 0.5em; /* Optional: add space between tiles */
+            /*gap: 0.5em; !* Optional: add space between tiles *!*/
             min-height: 1em; /* Prevent collapse when empty */
         }
 
