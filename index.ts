@@ -32,43 +32,6 @@ Object.defineProperty(Array.prototype, 'shuffle', {
     }
 });
 
-/**
- * Partition an array according to a partition function.
- * The partition function is of the form (elem: T, index?: number, array?: Array<T>) => string | number
- * and returns a key value for the item.
- * Returns an object whose properties are the partitioned keys.  The value of these properties
- * is an array of items belonging to the partition.
- * @example
- `const lookup: { [key: string]: string; } =
- {H: 'Hearts', D: 'Diamonds', S: 'Spades', C: 'Clubs' };
- ['4H', 'KD', '3S', 'AS', '9H'].partition( (e: string) => lookup[e[1]]);`
-
- { Hearts: ["4H", "9H"], Diamonds: ["KD"], Spades: ["3S", "AS"] }
-
- * @param filter A PartitionFunc
- */
-
-type Partition<T> = {
-    [Key in string | number]: Array<T>;
-};
-
-type PartitionFunc<T> = (item: T, index?: number, array?: Array<T>) => string | number
-
-Object.defineProperty(Array.prototype, 'partition', {
-    value:
-        function <T>(filter: PartitionFunc<T>) {
-            const partitions: Partition<T> = {};
-            let index = 0;
-            for (const item of this) {
-                const k = filter(item, index++, this);
-                if (partitions[k] === undefined)
-                    partitions[k] = [];
-                partitions[k].push(item);
-            }
-            return partitions;
-        }
-})
-
 // https://chatgpt.com/s/t_687e848ccd088191b6e279a5e4367855
 function FLIP(
     el: HTMLElement,
@@ -102,17 +65,20 @@ function FLIP(
 
 
 
-async function level(levelIndex: number, instructions: string, cols: number, rows: number,timeoutMs: number = 3000) {
+async function level(timeoutMs: number = 3000): Promise<void> {
 
     const lookedUpWord = document.querySelector('#looked-up-word') as HTMLDivElement;
     const deckEl = document.querySelector('.deck') as HTMLDivElement;
 
-    // const timeoutActionType: "hint" | "add" | "remove" = setsToAddPerTimeout === 0 ? "hint" : setsToAddPerTimeout > 0 ? "add" : "remove"
-
-    let setsRemaining = 0;
-
     let lastWordTime = 0;
+    let madeWord= ""
 
+    const ScrabbleLetters: string[] = [];
+    Object.values(scrabbleData) .forEach(tile => {
+        for (let i = 0; i < tile.frequency; i++) {
+            ScrabbleLetters.push(tile.letter);
+        }
+    });
 
     return new Promise<void>((resolve, reject) => {
         const wordEl = document.querySelector('#word') as HTMLDivElement;
@@ -121,11 +87,11 @@ async function level(levelIndex: number, instructions: string, cols: number, row
         /// TODO: Make this do real stuff
         tickEl.addEventListener('click', e => {
 
-            if (lookedUpWord.innerText != "") {
+            if (madeWord != "") {
 
                 // User clicked the tick, so we assume they want to submit the word
                 wordEl.innerHTML = ""; // Clear the word
-                UpdateWordMade();
+                updateMadeWord();
                 playSoundEffect("selected3");
                 resetTimerBar();
                 if (deckEl.children.length == 0)
@@ -136,37 +102,41 @@ async function level(levelIndex: number, instructions: string, cols: number, row
 
 
 
+        const updateMadeWord = (): void => {
+            const candidateWord = (): string => {
+                let word = "";
 
-        const candidateWord = (): string => {
-            let word = "";
-
-            // get the letters from word divs children
-            const wordCells = Array.from(wordEl.children) as HTMLDivElement[];
-            for (const cell of wordCells) {
-                const letter = getTileElementLetter(cell);
-                if (letter) {
-                    word += letter == " " ? "?" : letter; // Change blank tiles to wildcards
+                // get the letters from word divs children
+                const wordCells = Array.from(wordEl.children) as HTMLDivElement[];
+                for (const cell of wordCells) {
+                    const letter = getTileElementLetter(cell);
+                    if (letter) {
+                        word += letter == " " ? "?" : letter; // Change blank tiles to wildcards
+                    }
                 }
+                return word.toLowerCase();
             }
-            return word.toLowerCase();
-        }
-        const GetDictWord = (word: string): string | undefined => {
+            const GetDictWord = (word: string): string | undefined => {
+                if (word.length < MIN_WORD_LENGTH && deckEl.children.length > 0)
+                    // The "Must be three letters ot more" only applies when there are at least 3 tiles left
+                    return undefined;
 
-            // Convert pattern to a regex: replace ? with .
-            // Commented out is case-insensitive version
-            // const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$', 'i');
-            const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$');
+                // Convert pattern to a regex: replace ? with .
+                // Commented out is case-insensitive version (allowing Proper nouns)
+                // const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$', 'i');
+
+                const regex = new RegExp('^' + word.replace(/\?/g, '[a-z]') + '$');
 
 
-            const match = WordList70.find(word => regex.test(word));
-            console.log("GetDictWord", word, "=>", match);
-            return match;
+                const match = WordList70.find(word => regex.test(word));
+                console.log("GetDictWord", word, "=>", match);
+                return match;
 
-        }
+            }
 
-        const UpdateWordMade = (): void => {
-            const madeWord = GetDictWord(candidateWord()) || ""
-            if (madeWord === "" ||  madeWord.length < 3) {
+            madeWord = GetDictWord(candidateWord()) || ""
+
+            if (madeWord === "") {
                 tickEl.classList.remove('hint');
             } else {
                 tickEl.classList.add('hint');
@@ -257,17 +227,17 @@ async function level(levelIndex: number, instructions: string, cols: number, row
                     }
                     // Move the tile back to the deck
                     FLIP(tileEl, (el) => {deckEl.appendChild(el)});
-                    UpdateWordMade();
+                    updateMadeWord();
                     return;
                 }
                 // only allow touch events for tiles on the last row of the deck
-                if (parseInt(getComputedStyle(tileEl).gridRowStart, 10) != rows) {
+                if (parseInt(getComputedStyle(tileEl).gridRowStart, 10) != ROWS) {
                     playSoundEffect("undo");
                     return;
                 }
 
                 await FLIP(tileEl, (el) => {wordEl.appendChild(el)}, 100);
-                UpdateWordMade();
+                updateMadeWord();
 
 
                 // select all tiles in the same column using their gridColmumn style as selector
@@ -304,7 +274,9 @@ async function level(levelIndex: number, instructions: string, cols: number, row
             // Find a set of tiles and animate them as a hint
             if (!userFoundWordBeforeTimeout()) {
 
-                showModalDialog("Too slow!").then(() => {reject()});
+                showModalDialog("Too slow!").then(() => {
+                    reject();
+                });
             }
         }
 
@@ -315,14 +287,13 @@ async function level(levelIndex: number, instructions: string, cols: number, row
             // Make deck
 
             deckEl.innerHTML = "";
-            deckEl.style.gridTemplateColumns = `repeat(10, minmax(0, 1fr))`;
-            deckEl.style.gridTemplateRows = `repeat(10, minmax(0, 1fr))`;
-            deckEl.style.aspectRatio = `1 / 1`; // Set aspect ratio of deck
-            ScrabbleLetters.shuffle();
-            for (let c = 0; c < 10; ++c) {
 
-                for (let r = 0; r < rows; ++r) {
-                    const i = c * rows + r;
+            // deckEl.style.aspectRatio = `1 / 1`; // Set aspect ratio of deck
+            ScrabbleLetters.shuffle();
+            for (let c = 0; c < COLS; ++c) {
+
+                for (let r = 0; r < ROWS; ++r) {
+
                     const tileEl = makeTileElementAtColumn(c);
                     deckEl.appendChild(tileEl);
                     setTileElementRow(tileEl, r);
@@ -508,13 +479,6 @@ const scrabbleData: { [letter: string]: TileInfo } = {
     " ": { letter: ' ', value: 0, frequency: 2 } // Blank tile
 };
 
-const ScrabbleLetters: string[] = [];
-Object.values(scrabbleData) .forEach(tile => {
-    for (let i = 0; i < tile.frequency; i++) {
-        ScrabbleLetters.push(tile.letter);
-    }
-});
-
 
 const modalDialog = document.querySelector('.modal') as HTMLDivElement;
 const modalDialogMessage = document.querySelector('.modal_message') as HTMLDivElement;
@@ -540,36 +504,11 @@ interface LevelDef {
     timeoutMs: number;
 }
 
-const levelsMobile: LevelDef[] = [
-    { instruction: "Match sets of three.",       cols: 5, rows:7, timeoutMs: 600_000 },
-    { instruction: "Match pairs!",               cols: 5, rows: 8, timeoutMs: 30_000 },
-    { instruction: "Match sets of three!",       cols: 5, rows: 8, timeoutMs: 60_000 },
-    { instruction: "Match pairs!",               cols: 7, rows: 10,timeoutMs: 60_000 },
-    { instruction: "Match sets of three!",       cols: 7, rows: 10,timeoutMs: 60_000 },
-    { instruction: "Match sets of three!",       cols: 7, rows: 11,timeoutMs: 60_000 },
-    { instruction: "Match sets of three!",       cols: 8, rows: 12,timeoutMs: 60_000 },
-];
 
-const levelsDesktop: LevelDef[] = [
-    { instruction: "Match sets of three",        cols: 10, rows:10, timeoutMs: 600_000 },
-    { instruction: "Match pairs!",               cols: 21, rows: 14,timeoutMs: 30_000 },
-    { instruction: "Match sets of three!",       cols: 5, rows: 8, timeoutMs: 60_000 },
-    { instruction: "Match pairs!",               cols: 7, rows: 10,timeoutMs: 60_000 },
-    { instruction: "Match sets of three!",       cols: 7, rows: 10,timeoutMs: 60_000 },
-    { instruction: "Match sets of three!",       cols: 7, rows: 11,timeoutMs: 60_000 },
-    { instruction: "Match sets of three!",       cols: 8, rows: 12,timeoutMs: 60_000 },
-];
 
-const levels = screen.width > screen.height && screen.width >= 1280 ? levelsDesktop : levelsMobile; // Use desktop levels on larger screens
-
-// 2) playLevel() simply looks up and invokes level():
-async function playLevel(idx: number): Promise<void> {
-    if (idx < 0 || idx >= levels.length) {
-        throw new RangeError(`Invalid level index ${idx}`);
-    }
-    const { instruction, cols, rows,timeoutMs } = levels[idx];
-    await level(idx, instruction, cols, rows, timeoutMs);
-}
+const ROWS = 10; // Number of rows in the game grid
+const COLS = 10; // Number of columns in the game grid
+const MIN_WORD_LENGTH = 3; // Minimum word length to score
 
 
 /**
@@ -587,26 +526,7 @@ function setReachedLevel(level: number): void {
     localStorage.setItem('reached_level', String(level));  //
 }
 
-/**
- * Plays the next unreached level, then increments the stored reached_level
- * only if playLevel resolves successfully.
- */
-async function playReachedLevel(): Promise<void> {
-    const levelIndex = getReachedLevel();
-    try {
-        await playLevel(levelIndex);        // invoke with no args from caller
-        setReachedLevel(levelIndex + 1);    // only increment on success
-    } catch (err) {
-        // playLevel rejected (e.g. user lost); do not advance reached_level
-        console.error(`Level ${levelIndex} failed or was aborted:`, err);
-        // throw err;  // rethrow if you want callers to handle it
-    }
-}
-// const strLevel =    prompt(`Level: (0-${levels.length-1})\n\n:`, getReachedLevel().toString());
-const levelIndex = 0; // strLevel !== null ? parseInt(strLevel, 10) : 0;
-if (!(isNaN(levelIndex) || levelIndex < 0 || levelIndex >= levels.length)) {
-    setReachedLevel(levelIndex); // Reset reached level to 0 on startup
-}
+
 
 (async () => {
 // Init audio
@@ -619,7 +539,12 @@ if (!(isNaN(levelIndex) || levelIndex < 0 || levelIndex >= levels.length)) {
     SoundEffect["ok"] = await getAudioBufferFromFile('/audio/match_ok.mp3');
     SoundEffect["clock-tick"] = await getAudioBufferFromFile('/audio/clock_tick.wav');
 
-    // await showModalDialog("Ready to play?");
+    await showModalDialog("" +
+        "<p>Make words of three letters or more from the tiles at the bottom row. When you use a tile, the tile above it will become available.<p>" +
+        "<p>When you've made a word, click the  <span style='color:green'>✓</span> to score that word, or see if you keep going and make a longer word!.</p>" +
+        "<p>You can undo by clicking the last tile in the words you're building.</p>" +
+        "<p>Good luck!</p>");
+
     // Keep soundbars from going into standby mode by playing a very high frequency sound
 // https://www.reddit.com/r/Soundbars/comments/nyxpzp/soundbar_standby_blocker_prevent_soundbar_from/?utm_source=chatgpt.com
     const oscTick = ctx.createOscillator();
@@ -627,7 +552,14 @@ if (!(isNaN(levelIndex) || levelIndex < 0 || levelIndex >= levels.length)) {
     oscTick.connect(ctx.destination);
     oscTick.start();
 
-    await playReachedLevel();
+    for (;;) {
+        try {
+            await level(60_000);
+        } catch (e) {
+            console.error("Level failed:", e);
+        }
+        await showModalDialog("You won! Try again?");
+    }
 
 })();
 

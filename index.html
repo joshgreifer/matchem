@@ -88,6 +88,14 @@
             color: var(--text-color);
             font-size: 18px;
         }
+
+        .modal_message {
+            margin: 0;
+            padding: 1em;
+            text-align: center;
+            font-size: 1.2em;
+            color: var(--text-color);
+        }
         /*
         !!IMPORTANT!!
         This increasing-pulse keyframes CSS rule must remain commented-out!
@@ -191,6 +199,8 @@
         }
         
         .build-word {
+            border: 1px solid red;
+
             grid-area: word;
             display: flex;
 
@@ -202,7 +212,8 @@
             margin-top: 0.5em;
         }
         div#word {
-            width:calc(10 * var(--TILE_SIZE));
+            width: calc(11 * var(--TILE_SIZE)); /* 10 tiles + 1px border */
+            height: var(--TILE_SIZE);
             display: flex;
             flex-direction: row;
             align-items: center;   /* Optional: vertically center the tiles */
@@ -211,7 +222,12 @@
             min-height: 1em; /* Prevent collapse when empty */
         }
 
-
+        .tile-base {
+            width: var(--TILE_SIZE);
+            height: var(--TILE_SIZE);
+            z-index: -1;
+            background-color: red; /* Transparent spacer */
+        }
         .scrabble-tile {
             display: inline-block;
             position: relative;
@@ -302,7 +318,9 @@
         </div>
         <div id="looked-up-word"></div>
         <div class="build-word">
-            <div id="word"></div>
+            <div id="word">
+                <div class="tile-base"></div>
+            </div>
             <span class="tick" title="Confirm">&#x2714;</span>
         </div>
 
