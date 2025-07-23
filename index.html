@@ -18,10 +18,7 @@
             --text-color: #ffffff;
             --dialog-background-color: #025771;
             --TRANSITION_TIME: 86400s;
-            --TILE_SIZE: 64px;
-        }
-        div {
-            /*border: 1px solid var(--backgound-edge-color);*/
+            --TILE_SIZE: 56px;
         }
         html, body {
             font-family: moody-adolescent-regular,sans-serif;
@@ -73,7 +70,6 @@
             display: grid;                /* establish grid for centering */
             place-items: center;          /* center children both axes */
         }
-
 
         .modal__content {
             border-radius: 15px;
@@ -128,42 +124,34 @@
             user-select: none;
         }
 
-        div#outer {
-
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
+        div#layout {
+            /*overflow: hidden;*/
+            min-height: 90vh;
+            height: 90vh;
+            box-sizing: border-box;
+            display: grid;
+            /*grid-template-rows: auto auto auto;*/
+            grid-template-columns: 1fr 120px;
+            grid-template-rows: 1fr 64px 64px;
+            grid-template-areas:
+                "deck timer-bar"
+                "build-word build-word"
+                "valid-word game-status";
             align-items: center;
             text-align: center;
-            height: calc(95vh);
-            width: 95vw;
+            margin: 5vh 5vw;
 
         }
         .deck {
-
+            /*aspect-ratio: 1/1; !* Maintain a square aspect ratio *!*/
+            /*border: 1px solid red;*/
+            grid-area: deck;
             display: grid;
             grid-template-columns: repeat(10, 1fr);
             grid-template-rows: repeat(10, 1fr);
-            position: relative;
+            /*position: relative;*/
             background-color: var(--game-background-color);
 
-        }
-        div#controls {
-            justify-content: normal;
-            display: grid;
-            grid-template-rows: 10px 1fr 1fr;
-
-            bottom: 0;
-            /*padding-top: 10px;*/
-            width: 100%;
-
-            /*height: 100px;*/
-            grid-template-areas:
-                "timer-bar"
-                "score"
-                "word";
-
-            font-size: 18px;
         }
 
         @font-face {
@@ -172,8 +160,11 @@
 
 
         div#timer-bar {
+            justify-self: end;
+            height: 100%;
+            width: 20px;
             grid-area: timer-bar;
-            background: linear-gradient(135deg, #ff0000 0%, #ff0000 10%, #0091c3 30%, #0091c3 90%, #00ff00 95%, #00ff00 100%);
+            /*background: linear-gradient(to top, #ff0000 0%, #ff0000 10%, #0091c3 30%, #0091c3 90%, #00ff00 95%, #00ff00 100%);*/
 
         }
         .timer-fill {
@@ -182,36 +173,59 @@
             background-color: var(--game-background-color);
 
         }
-        .timer-fill.animate {
-            animation: drain var(--TRANSITION_TIME) linear forwards;
+        @keyframes barColorChange {
+            100% { background-color: #ff0000; }   /* Start, fill fully covers bar: top is red */
+            90% { background-color: #ff0000; }
+            70% { background-color: #0091c3; }
+            10% { background-color: #0091c3; }
+            5% { background-color: #00ff00; }
+            0% { background-color: #00ff00; }   /* End, fill gone: bottom is green */
         }
+
+
+        .timer-fill.animate {
+            animation:
+                    drain var(--TRANSITION_TIME) linear forwards,
+                    barColorChange var(--TRANSITION_TIME) linear forwards;
+        }
+
         @keyframes drain {
             from {
-                width: 100%;
+                height: 0;
             }
             to {
-                width: 0;
+                height: 100%;
             }
         }
 
-        div#looked-up-word {
-            grid-area: score;
-        }
-        
-        .build-word {
-            border: 1px solid red;
-
-            grid-area: word;
+        div#game-status {
+            grid-area: game-status;
             display: flex;
-
-            justify-content: center;
             flex-direction: row;
             align-items: center;
+            justify-content: center;
             gap: 1em; /* Space between score, word, and tick */
-            width: 100%;
-            margin-top: 0.5em;
         }
-        div#word {
+        div#valid-word {
+            border: 1px solid red; /* while testing - remove later */
+
+            grid-area: valid-word;
+        }
+        
+        .build-word-container {
+
+            grid-area: build-word;
+            display: flex;
+
+            /*justify-content: center;*/
+            flex-direction:     row;
+            align-items: center;
+            gap: 1em; /* Space between score, word, and tick */
+
+
+
+        }
+        #word {
             width: calc(11 * var(--TILE_SIZE)); /* 10 tiles + 1px border */
             height: var(--TILE_SIZE);
             display: flex;
@@ -221,12 +235,16 @@
             /*gap: 0.5em; !* Optional: add space between tiles *!*/
             min-height: 1em; /* Prevent collapse when empty */
         }
-
-        .tile-base {
+        #word > :nth-child(7).background {
+            /* Your styles for the 7th child, e.g.: */
+            background: gold;
+            /* or add the "double-word-bonus" class via JS: */
+        }
+        .background {
             width: var(--TILE_SIZE);
             height: var(--TILE_SIZE);
-            z-index: -1;
-            background-color: red; /* Transparent spacer */
+            margin: 2px;
+            background: linear-gradient(145deg, #000000 60%, #d9c08b 100%);
         }
         .scrabble-tile {
             display: inline-block;
@@ -246,7 +264,7 @@
             color: #42361e;
             text-align: center;
             line-height: var(--TILE_SIZE);
-            font-size: 40px;
+            font-size: calc( var(--TILE_SIZE) * .5 ); /* Adjust font size based on tile size */
             user-select: none;
         }
         .scrabble-tile::after {
@@ -285,46 +303,61 @@
 
         @keyframes hintCycle {
 
-            0%   { transform: scale(100%); }
-            50% { transform: scale(200%); }
-            100% { transform: scale(100%); }
+            0%   { transform: scale(150%); }
+            50% { transform: scale(175%); }
+            100% { transform: scale(150%); }
          }
 
         .tick.hint {
+
+            vertical-align: middle;
+            text-align: center;
+            width: 30px;
+            height: 30px;
+            line-height: 30px;
+            border-radius: 25%;
+            background: linear-gradient(135deg, #f63737 0%, #550000 100%);
             display: inline-block;
-            color: green;
+            color: var(--text-color);
             cursor: pointer;
-            font-size: 1.5em;
+            font-size: 1em;
             user-select: none;
-            animation: hintCycle .5s ease-in-out infinite;
+            margin-left: 30px;
+            animation: hintCycle 1s ease-in-out infinite;
         }
 
-        div.fadeIn {
-            animation: fade-in 0.2s ease forwards;
+        #bonus-badge {
+            width: 32px;
         }
 
-        div.grow {
-            /*animation: grow 0.5s ease forwards;*/
-        }
     </style>
 </head>
 <body>
 
-<div id="outer">
+<div id="layout">
     <div class="deck"></div>
-    <div id="controls">
+
         <div id="timer-bar">
             <div class="timer-fill"></div>
         </div>
-        <div id="looked-up-word"></div>
-        <div class="build-word">
-            <div id="word">
-                <div class="tile-base"></div>
-            </div>
-            <span class="tick" title="Confirm">&#x2714;</span>
-        </div>
 
+
+    <div class="build-word-container">
+        <div id="word"></div>
     </div>
+    <div id="valid-word">
+        <span id="looked-up-word"></span>
+        <span id="bonus-badge"></span>
+        <span id="score"></span>
+        <span class="tick" title="Click to confirm word">&#x2714;</span>
+    </div>
+    <div id="game-status">
+
+        <span>
+            <button class="give-up-button">Give Up</button>
+        </span>
+    </div>
+
 </div>
 
 <div id="modal" class="modal">

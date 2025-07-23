@@ -44,65 +44,102 @@ function FLIP(el, mutator, duration = 400) {
     });
 }
 async function level(timeoutMs = 3000) {
-    const lookedUpWord = document.querySelector('#looked-up-word');
+    const lookedUpWordEl = document.querySelector('#looked-up-word');
     const deckEl = document.querySelector('.deck');
+    const scoreEl = document.querySelector('#score');
+    const bonusBadgeEl = document.querySelector('#bonus-badge');
     let lastWordTime = 0;
-    let madeWord = "";
     const ScrabbleLetters = [];
     Object.values(scrabbleData).forEach(tile => {
         for (let i = 0; i < tile.frequency; i++) {
             ScrabbleLetters.push(tile.letter);
         }
     });
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         const wordEl = document.querySelector('#word');
         const tickEl = document.querySelector('.tick');
+        let totalScore = 0;
         /// TODO: Make this do real stuff
         tickEl.addEventListener('click', e => {
-            if (madeWord != "") {
-                // User clicked the tick, so we assume they want to submit the word
-                wordEl.innerHTML = ""; // Clear the word
-                updateMadeWord();
-                playSoundEffect("selected3");
-                resetTimerBar();
-                if (deckEl.children.length == 0)
-                    // All tiles are used up, so we resolve the promise
-                    resolve();
-            }
+            totalScore += parseInt(tickEl.innerText, 10);
+            // User clicked the tick, so we assume they want to submit the word
+            wordEl.innerHTML = ""; // Clear the word
+            playSoundEffect("selected3");
+            resetTimerBar();
+            if (deckEl.children.length == 0)
+                // All tiles are used up, so we resolve the promise
+                resolve(totalScore);
         });
-        const updateMadeWord = () => {
-            const candidateWord = () => {
-                let word = "";
-                // get the letters from word divs children
-                const wordCells = Array.from(wordEl.children);
-                for (const cell of wordCells) {
-                    const letter = getTileElementLetter(cell);
-                    if (letter) {
-                        word += letter == " " ? "?" : letter; // Change blank tiles to wildcards
-                    }
+        const observer = new MutationObserver((mutationList) => {
+            mutationList.forEach(mutation => {
+                if (mutation.type === 'childList') {
+                    console.log(' Tiles added or removed:', mutation);
+                    onWordElementChanged();
                 }
-                return word.toLowerCase();
+            });
+        });
+        observer.observe(wordEl, {
+            childList: true, // watch for added/removed child nodes
+            subtree: false // only direct children
+        });
+        const onWordElementChanged = () => {
+            const updateMadeWord = () => {
+                const candidateWord = () => {
+                    let word = "";
+                    // get the letters from word divs children
+                    const wordCells = Array.from(wordEl.children);
+                    for (const cell of wordCells) {
+                        const letter = getTileElementLetter(cell);
+                        if (letter) {
+                            word += letter == " " ? "?" : letter; // Change blank tiles to wildcards
+                        }
+                    }
+                    return word.toLowerCase();
+                };
+                const GetDictWord = (word) => {
+                    if (word.length < MIN_WORD_LENGTH && deckEl.children.length > 0)
+                        // The "Must be three letters ot more" only applies when there are at least 3 tiles left
+                        return undefined;
+                    // Convert pattern to a regex: replace ? with .
+                    // Commented out is case-insensitive version (allowing Proper nouns)
+                    // const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$', 'i');
+                    const regex = new RegExp('^' + word.replace(/\?/g, '[a-z]') + '$');
+                    const match = WordList70.find(word => regex.test(word));
+                    console.log("GetDictWord", word, "=>", match);
+                    return match;
+                };
+                return GetDictWord(candidateWord()) || "";
             };
-            const GetDictWord = (word) => {
-                if (word.length < MIN_WORD_LENGTH && deckEl.children.length > 0)
-                    // The "Must be three letters ot more" only applies when there are at least 3 tiles left
-                    return undefined;
-                // Convert pattern to a regex: replace ? with .
-                // Commented out is case-insensitive version (allowing Proper nouns)
-                // const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$', 'i');
-                const regex = new RegExp('^' + word.replace(/\?/g, '[a-z]') + '$');
-                const match = WordList70.find(word => regex.test(word));
-                console.log("GetDictWord", word, "=>", match);
-                return match;
-            };
-            madeWord = GetDictWord(candidateWord()) || "";
-            if (madeWord === "") {
+            const madeWord = updateMadeWord();
+            // calculate score by summing the values of the letters in the word
+            let score = Array.from(madeWord).reduce((acc, letter) => {
+                return acc + (scrabbleData[letter.toUpperCase()]?.value || 0);
+            }, 0);
+            lookedUpWordEl.innerHTML = madeWord;
+            bonusBadgeEl.innerHTML = "";
+            if (madeWord.length >= 10) {
+                score *= 5; // Bonus for long words
+                bonusBadgeEl.innerHTML = "x5!!";
+                bonusBadgeEl.classList.add('x5!!!');
+                // playSoundEffect("excellent");
+            }
+            else if (madeWord.length >= 9) {
+                score *= 3; // Bonus for long words
+                bonusBadgeEl.innerHTML = "x3!!";
+                bonusBadgeEl.classList.add('x3');
+            }
+            else if (madeWord.length >= 7) {
+                score *= 2; // Bonus for long words
+                bonusBadgeEl.innerHTML = "x2!";
+                bonusBadgeEl.classList.add('x2');
+            }
+            if (score === 0 && deckEl.children.length > 0) {
                 tickEl.classList.remove('hint');
             }
             else {
                 tickEl.classList.add('hint');
+                tickEl.innerText = `${score}`;
             }
-            lookedUpWord.innerHTML = madeWord;
         };
         const setTileElementLetter = (tileEl, letter) => {
             tileEl.dataset['letter'] = tileEl.innerText = letter;
@@ -169,7 +206,6 @@ async function level(timeoutMs = 3000) {
                     }
                     // Move the tile back to the deck
                     FLIP(tileEl, (el) => { deckEl.appendChild(el); });
-                    updateMadeWord();
                     return;
                 }
                 // only allow touch events for tiles on the last row of the deck
@@ -178,7 +214,6 @@ async function level(timeoutMs = 3000) {
                     return;
                 }
                 await FLIP(tileEl, (el) => { wordEl.appendChild(el); }, 100);
-                updateMadeWord();
                 // select all tiles in the same column using their gridColmumn style as selector
                 const cellsToMove = Array.from(document.querySelectorAll('.scrabble-tile'))
                     .filter(cell => {
@@ -200,11 +235,8 @@ async function level(timeoutMs = 3000) {
             return Date.now() - lastWordTime < timeoutMs;
         };
         const timeoutAction = () => {
-            // Find a set of tiles and animate them as a hint
             if (!userFoundWordBeforeTimeout()) {
-                showModalDialog("Too slow!").then(() => {
-                    reject();
-                });
+                resolve(totalScore);
             }
         };
         const initialDeal = () => {
@@ -212,6 +244,7 @@ async function level(timeoutMs = 3000) {
             // const audioElOk = document.querySelector('#audio_match_ok') as HTMLAudioElement;
             // Make deck
             deckEl.innerHTML = "";
+            wordEl.innerHTML = "";
             // deckEl.style.aspectRatio = `1 / 1`; // Set aspect ratio of deck
             ScrabbleLetters.shuffle();
             for (let c = 0; c < COLS; ++c) {
@@ -224,6 +257,8 @@ async function level(timeoutMs = 3000) {
             }
             setTimerBarTransitionTime(timeoutMs);
             resetTimerBar();
+            // Initialize score
+            onWordElementChanged();
         };
         const resetTimerBar = () => {
             const onBarEnd = () => {
@@ -405,13 +440,8 @@ function setReachedLevel(level) {
     oscTick.connect(ctx.destination);
     oscTick.start();
     for (;;) {
-        try {
-            await level(60_000);
-        }
-        catch (e) {
-            console.error("Level failed:", e);
-        }
-        await showModalDialog("You won! Try again?");
+        const levelScore = await level(120_000);
+        await showModalDialog(`You scored ${levelScore}.<br> Play again?`);
     }
 })();
 //# sourceMappingURL=index.js.map

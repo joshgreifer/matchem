@@ -65,13 +65,15 @@ function FLIP(
 
 
 
-async function level(timeoutMs: number = 3000): Promise<void> {
+async function level(timeoutMs: number = 3000): Promise<number> {
 
-    const lookedUpWord = document.querySelector('#looked-up-word') as HTMLDivElement;
+    const lookedUpWordEl = document.querySelector('#looked-up-word') as HTMLDivElement;
     const deckEl = document.querySelector('.deck') as HTMLDivElement;
+    const scoreEl = document.querySelector('#score') as HTMLDivElement;
+    const bonusBadgeEl = document.querySelector('#bonus-badge') as HTMLDivElement;
 
     let lastWordTime = 0;
-    let madeWord= ""
+
 
     const ScrabbleLetters: string[] = [];
     Object.values(scrabbleData) .forEach(tile => {
@@ -80,69 +82,106 @@ async function level(timeoutMs: number = 3000): Promise<void> {
         }
     });
 
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<number>((resolve) => {
         const wordEl = document.querySelector('#word') as HTMLDivElement;
         const tickEl = document.querySelector('.tick') as HTMLDivElement;
-
+        let totalScore = 0;
         /// TODO: Make this do real stuff
         tickEl.addEventListener('click', e => {
+            totalScore += parseInt(tickEl.innerText, 10);
+            // User clicked the tick, so we assume they want to submit the word
+            wordEl.innerHTML = ""; // Clear the word
 
-            if (madeWord != "") {
-
-                // User clicked the tick, so we assume they want to submit the word
-                wordEl.innerHTML = ""; // Clear the word
-                updateMadeWord();
-                playSoundEffect("selected3");
-                resetTimerBar();
-                if (deckEl.children.length == 0)
-                    // All tiles are used up, so we resolve the promise
-                    resolve();
-            }
+            playSoundEffect("selected3");
+            resetTimerBar();
+            if (deckEl.children.length == 0)
+                // All tiles are used up, so we resolve the promise
+                resolve(totalScore);
         })
 
-
-
-        const updateMadeWord = (): void => {
-            const candidateWord = (): string => {
-                let word = "";
-
-                // get the letters from word divs children
-                const wordCells = Array.from(wordEl.children) as HTMLDivElement[];
-                for (const cell of wordCells) {
-                    const letter = getTileElementLetter(cell);
-                    if (letter) {
-                        word += letter == " " ? "?" : letter; // Change blank tiles to wildcards
-                    }
+        const observer = new MutationObserver((mutationList) => {
+            mutationList.forEach(mutation => {
+                if (mutation.type === 'childList') {
+                    console.log(' Tiles added or removed:', mutation);
+                    onWordElementChanged();
                 }
-                return word.toLowerCase();
+            });
+        });
+
+        observer.observe(wordEl, {
+            childList: true,    // watch for added/removed child nodes
+            subtree: false      // only direct children
+        });
+
+        const onWordElementChanged = (): void => {
+            const updateMadeWord = (): string => {
+                const candidateWord = (): string => {
+                    let word = "";
+
+                    // get the letters from word divs children
+                    const wordCells = Array.from(wordEl.children) as HTMLDivElement[];
+                    for (const cell of wordCells) {
+                        const letter = getTileElementLetter(cell);
+                        if (letter) {
+                            word += letter == " " ? "?" : letter; // Change blank tiles to wildcards
+                        }
+                    }
+                    return word.toLowerCase();
+                }
+                const GetDictWord = (word: string): string | undefined => {
+                    if (word.length < MIN_WORD_LENGTH && deckEl.children.length > 0)
+                        // The "Must be three letters ot more" only applies when there are at least 3 tiles left
+                        return undefined;
+
+                    // Convert pattern to a regex: replace ? with .
+                    // Commented out is case-insensitive version (allowing Proper nouns)
+                    // const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$', 'i');
+
+                    const regex = new RegExp('^' + word.replace(/\?/g, '[a-z]') + '$');
+
+
+                    const match = WordList70.find(word => regex.test(word));
+                    console.log("GetDictWord", word, "=>", match);
+                    return match;
+
+                }
+
+                return GetDictWord(candidateWord()) || ""
+
+
             }
-            const GetDictWord = (word: string): string | undefined => {
-                if (word.length < MIN_WORD_LENGTH && deckEl.children.length > 0)
-                    // The "Must be three letters ot more" only applies when there are at least 3 tiles left
-                    return undefined;
-
-                // Convert pattern to a regex: replace ? with .
-                // Commented out is case-insensitive version (allowing Proper nouns)
-                // const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$', 'i');
-
-                const regex = new RegExp('^' + word.replace(/\?/g, '[a-z]') + '$');
+            const madeWord = updateMadeWord()
+            // calculate score by summing the values of the letters in the word
+            let score = Array.from(madeWord).reduce((acc, letter) => {
+                return acc + (scrabbleData[letter.toUpperCase()]?.value || 0);
+            }, 0);
 
 
-                const match = WordList70.find(word => regex.test(word));
-                console.log("GetDictWord", word, "=>", match);
-                return match;
+            lookedUpWordEl.innerHTML = madeWord;
+            bonusBadgeEl.innerHTML = "";
+            if (madeWord.length >= 10) {
+                score *= 5; // Bonus for long words
+                bonusBadgeEl.innerHTML = "x5!!";
+                bonusBadgeEl.classList.add('x5!!!');
+            // playSoundEffect("excellent");
+            } else if (madeWord.length >= 9) {
+                score *= 3; // Bonus for long words
+                bonusBadgeEl.innerHTML = "x3!!";
+                bonusBadgeEl.classList.add('x3');
 
+            } else if (madeWord.length >= 7) {
+                score *= 2; // Bonus for long words
+                bonusBadgeEl.innerHTML = "x2!";
+                bonusBadgeEl.classList.add('x2');
             }
-
-            madeWord = GetDictWord(candidateWord()) || ""
-
-            if (madeWord === "") {
+            if (score === 0 && deckEl.children.length > 0) {
                 tickEl.classList.remove('hint');
             } else {
                 tickEl.classList.add('hint');
+                tickEl.innerText = `${score}`;
             }
-            lookedUpWord.innerHTML = madeWord
         }
+
 
         const setTileElementLetter = (tileEl: HTMLDivElement, letter: string): void => {
             tileEl.dataset['letter'] = tileEl.innerText = letter;
@@ -227,7 +266,7 @@ async function level(timeoutMs: number = 3000): Promise<void> {
                     }
                     // Move the tile back to the deck
                     FLIP(tileEl, (el) => {deckEl.appendChild(el)});
-                    updateMadeWord();
+
                     return;
                 }
                 // only allow touch events for tiles on the last row of the deck
@@ -237,7 +276,6 @@ async function level(timeoutMs: number = 3000): Promise<void> {
                 }
 
                 await FLIP(tileEl, (el) => {wordEl.appendChild(el)}, 100);
-                updateMadeWord();
 
 
                 // select all tiles in the same column using their gridColmumn style as selector
@@ -271,12 +309,9 @@ async function level(timeoutMs: number = 3000): Promise<void> {
         }
 
         const timeoutAction = () => {
-            // Find a set of tiles and animate them as a hint
-            if (!userFoundWordBeforeTimeout()) {
 
-                showModalDialog("Too slow!").then(() => {
-                    reject();
-                });
+            if (!userFoundWordBeforeTimeout()) {
+                    resolve(totalScore);
             }
         }
 
@@ -287,7 +322,7 @@ async function level(timeoutMs: number = 3000): Promise<void> {
             // Make deck
 
             deckEl.innerHTML = "";
-
+            wordEl.innerHTML = "";
             // deckEl.style.aspectRatio = `1 / 1`; // Set aspect ratio of deck
             ScrabbleLetters.shuffle();
             for (let c = 0; c < COLS; ++c) {
@@ -304,6 +339,8 @@ async function level(timeoutMs: number = 3000): Promise<void> {
 
             setTimerBarTransitionTime(timeoutMs);
             resetTimerBar();
+            // Initialize score
+            onWordElementChanged();
 
 
         }
@@ -553,12 +590,9 @@ function setReachedLevel(level: number): void {
     oscTick.start();
 
     for (;;) {
-        try {
-            await level(60_000);
-        } catch (e) {
-            console.error("Level failed:", e);
-        }
-        await showModalDialog("You won! Try again?");
+        const levelScore = await level(120_000);
+
+        await showModalDialog(`You scored ${levelScore}.<br> Play again?`);
     }
 
 })();
