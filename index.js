@@ -62,13 +62,16 @@ async function level(timeoutMs = 3000) {
         /// TODO: Make this do real stuff
         tickEl.addEventListener('click', e => {
             totalScore += parseInt(tickEl.innerText, 10);
-            // User clicked the tick, so we assume they want to submit the word
-            wordEl.innerHTML = ""; // Clear the word
             playSoundEffect("selected3");
             resetTimerBar();
-            if (deckEl.children.length == 0)
-                // All tiles are used up, so we resolve the promise
+            if (deckEl.children.length == 0) {
+                if (wordEl.children.length >= MIN_WORD_LENGTH) {
+                    playSoundEffect("excellent");
+                    totalScore += 200; // Bonus for finishing on a word of at least 3 letters
+                }
                 resolve(totalScore);
+            }
+            wordEl.innerHTML = ""; // Clear the word
         });
         const observer = new MutationObserver((mutationList) => {
             mutationList.forEach(mutation => {
@@ -97,8 +100,7 @@ async function level(timeoutMs = 3000) {
                     return word.toLowerCase();
                 };
                 const GetDictWord = (word) => {
-                    if (word.length < MIN_WORD_LENGTH && deckEl.children.length > 0)
-                        // The "Must be three letters ot more" only applies when there are at least 3 tiles left
+                    if (word.length < MIN_WORD_LENGTH)
                         return undefined;
                     // Convert pattern to a regex: replace ? with .
                     // Commented out is case-insensitive version (allowing Proper nouns)
