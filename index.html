@@ -308,7 +308,7 @@
             100% { transform: scale(150%); }
          }
 
-        .tick.hint {
+        .tick.active {
 
             vertical-align: middle;
             text-align: center;
@@ -329,7 +329,10 @@
         #bonus-badge {
             width: 32px;
         }
-
+        .tick.active.no-score {
+            background: linear-gradient(135deg, #afafaf 0%, #3a3a3a 100%);
+            color: var(--text-color);
+        }
     </style>
 </head>
 <body>

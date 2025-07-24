@@ -119,6 +119,7 @@ async function level(timeoutMs = 3000) {
             }, 0);
             lookedUpWordEl.innerHTML = madeWord;
             bonusBadgeEl.innerHTML = "";
+            tickEl.className = 'tick'; // Reset tick element class
             if (madeWord.length >= 10) {
                 score *= 5; // Bonus for long words
                 bonusBadgeEl.innerHTML = "x5!!";
@@ -136,13 +137,14 @@ async function level(timeoutMs = 3000) {
                 bonusBadgeEl.classList.add('x2');
             }
             if (score === 0 && deckEl.children.length > 0) {
-                tickEl.classList.remove('hint');
+                tickEl.classList.remove('active');
             }
             else {
-                tickEl.classList.add('hint');
-                if (madeWord.length < MIN_SCORING_WORD_LENGTH)
-                    score = 0;
+                tickEl.classList.add('active');
                 tickEl.innerText = `${score}`;
+                if (madeWord.length < MIN_SCORING_WORD_LENGTH || score < MIN_SCORING_SCORE) {
+                    tickEl.classList.add('no-score');
+                }
             }
         };
         const setTileElementLetter = (tileEl, letter) => {
@@ -410,6 +412,7 @@ const ROWS = 10; // Number of rows in the game grid
 const COLS = 10; // Number of columns in the game grid
 const MIN_WORD_LENGTH = 3; // Minimum word length allowed
 const MIN_SCORING_WORD_LENGTH = 4; // Minimum word length to score
+const MIN_SCORING_SCORE = 10; // Minimum score to consider a word valid for scoring
 /**
  * Retrieve the persisted reached level (defaulting to 0).
  */
