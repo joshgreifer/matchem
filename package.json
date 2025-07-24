@@ -1,0 +1,23 @@
+{
+  "name": "memory",
+  "version": "1.0.0",
+  "description": "None",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joshgreifer/matchem.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/joshgreifer/matchem/issues"
+  },
+  "homepage": "https://github.com/joshgreifer/matchem#readme",
+  "devDependencies": {
+    "electron": "^37.2.4"
+  }
+}

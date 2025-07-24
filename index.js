@@ -140,6 +140,8 @@ async function level(timeoutMs = 3000) {
             }
             else {
                 tickEl.classList.add('hint');
+                if (madeWord.length < MIN_SCORING_WORD_LENGTH)
+                    score = 0;
                 tickEl.innerText = `${score}`;
             }
         };
@@ -406,7 +408,8 @@ const showModalDialog = async (message) => {
 };
 const ROWS = 10; // Number of rows in the game grid
 const COLS = 10; // Number of columns in the game grid
-const MIN_WORD_LENGTH = 3; // Minimum word length to score
+const MIN_WORD_LENGTH = 3; // Minimum word length allowed
+const MIN_SCORING_WORD_LENGTH = 4; // Minimum word length to score
 /**
  * Retrieve the persisted reached level (defaulting to 0).
  */
@@ -426,10 +429,10 @@ function setReachedLevel(level) {
     SoundEffect["selected2"] = getBlip(1250, 0.01, 0.03);
     SoundEffect["selected3"] = getBlip(1500, 0.01, 0.03);
     SoundEffect["undo"] = getBlip(200, 0.01, 0.05);
-    SoundEffect["good"] = await getAudioBufferFromFile('/audio/match_good.mp3');
-    SoundEffect["excellent"] = await getAudioBufferFromFile('/audio/match_excellent.mp3');
-    SoundEffect["ok"] = await getAudioBufferFromFile('/audio/match_ok.mp3');
-    SoundEffect["clock-tick"] = await getAudioBufferFromFile('/audio/clock_tick.wav');
+    SoundEffect["good"] = await getAudioBufferFromFile('audio/match_good.mp3');
+    SoundEffect["excellent"] = await getAudioBufferFromFile('audio/match_excellent.mp3');
+    SoundEffect["ok"] = await getAudioBufferFromFile('audio/match_ok.mp3');
+    SoundEffect["clock-tick"] = await getAudioBufferFromFile('audio/clock_tick.wav');
     await showModalDialog("" +
         "<p>Make words of three letters or more from the tiles at the bottom row. When you use a tile, the tile above it will become available.<p>" +
         "<p>When you've made a word, click the  <span style='color:green'>✓</span> to score that word, or see if you keep going and make a longer word!.</p>" +
