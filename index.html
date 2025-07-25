@@ -204,7 +204,7 @@
             flex-direction: row;
             align-items: center;
             justify-content: center;
-            gap: 1em; /* Space between score, word, and tick */
+            gap: 1em; /* Space between score, word, and submit-button */
         }
         div#valid-word {
             /*border: 1px solid red; !* while testing - remove later *!*/
@@ -220,7 +220,7 @@
             /*justify-content: center;*/
             flex-direction:     row;
             align-items: center;
-            gap: 1em; /* Space between score, word, and tick */
+            gap: 1em; /* Space between score, word, and submit-button */
 
 
 
@@ -297,7 +297,7 @@
             transition: transform 0.6s;
         }
 
-        .tick {
+        .submit-button {
             display: none;
         }
 
@@ -308,7 +308,7 @@
             100% { transform: scale(150%); }
          }
 
-        .tick.active {
+        .submit-button.active {
 
             vertical-align: middle;
             text-align: center;
@@ -329,7 +329,7 @@
         #bonus-badge {
             width: 32px;
         }
-        .tick.active.no-score {
+        .submit-button.active.no-score {
             background: linear-gradient(135deg, #afafaf 0%, #3a3a3a 100%);
             color: var(--text-color);
         }
@@ -351,8 +351,8 @@
     <div id="valid-word">
         <span id="looked-up-word"></span>
         <span id="bonus-badge"></span>
-        <span id="score"></span>
-        <span class="tick" title="Click to confirm word">&#x2714;</span>
+
+        <span class="submit-button" title="Click to confirm word">&#x2714;</span>
     </div>
     <div id="game-status">
 
@@ -360,7 +360,7 @@
             <button class="give-up-button">Give Up</button>
         </span>
     </div>
-
+    <span id="total-score"></span>
 </div>
 
 <div id="modal" class="modal">
@@ -372,6 +372,7 @@
 
 
 </body>
+<script src="assets/wordlist/LEXICON.js"></script>
 <script src="assets/wordlist/wordlist.js"></script>
 <script src="index.js"></script>
 </html>

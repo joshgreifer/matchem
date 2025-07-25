@@ -5,7 +5,7 @@ interface Array<T> {
     shuffle(): Array<T>;
     partition<T>(filter: (item: T, index?: number, array?: Array<T>) => string | number): { [key: string]: Array<T> };
 }
-declare const WordList70: string[];
+
 Object.defineProperty(Array.prototype, 'randomIndex', {
     value: function () {
         return this.length ? Math.floor(Math.random() * this.length) : undefined;
@@ -31,6 +31,49 @@ Object.defineProperty(Array.prototype, 'shuffle', {
         return this;
     }
 });
+// https://chatgpt.com/c/68760bb4-860c-800a-afb3-e88ba983c6a7
+// Type for Trie node (optional, but good practice)
+type TrieNode = { [key: string]: TrieNode } & { $?: true };
+
+// Check if word exists in the trie
+function isWord(word: string): boolean {
+    return _dfs_handling_blanks(word, 0, LEXICON, true);
+}
+
+// Check if prefix exists in the trie (as a valid start)
+function startsWith(prefix: string): boolean {
+    return _dfs_handling_blanks(prefix, 0, LEXICON, false);
+}
+
+// Handles blanks (represented as '?') recursively
+function _dfs_handling_blanks(
+    str: string,
+    i: number,
+    node: TrieNode,
+    end: boolean
+): boolean {
+    if (i === str.length) {
+        return end ? !!node.$ : true;
+    }
+    const ch = str[i];
+    // console.log(`_dfs_handling_blanks: str=${str}, i=${i}, ch=${ch}, end=${end}`);
+
+    if (ch === "?" || ch === " ") {
+        // Blank can be any letter a-z
+        for (const key in node) {
+            if (key === "$") continue;
+            if (_dfs_handling_blanks(str, i + 1, node[key], end)) return true;
+        }
+        return false;
+    } else if (node[ch]) {
+        return _dfs_handling_blanks(str, i + 1, node[ch], end);
+    } else {
+        return false;
+    }
+}
+// The global lexicon
+declare const LEXICON: TrieNode
+declare const WordList70: string[]; // The global word list, used for startsWith and isWord
 
 // https://chatgpt.com/s/t_687e848ccd088191b6e279a5e4367855
 function FLIP(
@@ -64,7 +107,6 @@ function FLIP(
 
 
 
-
 async function level(timeoutMs: number = 3000): Promise<number> {
 
     const lookedUpWordEl = document.querySelector('#looked-up-word') as HTMLDivElement;
@@ -75,6 +117,7 @@ async function level(timeoutMs: number = 3000): Promise<number> {
     let lastWordTime = 0;
 
 
+
     const ScrabbleLetters: string[] = [];
     Object.values(scrabbleData) .forEach(tile => {
         for (let i = 0; i < tile.frequency; i++) {
@@ -82,13 +125,136 @@ async function level(timeoutMs: number = 3000): Promise<number> {
         }
     });
 
+    const FindWordInLexicon = (word: string, sw: boolean = false): string | undefined => {
+
+
+        // Convert pattern to a regex: replace ? with .
+        // Commented out is case-insensitive version (allowing Proper nouns)
+        // const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$', 'i');
+        const foundInLexicon = sw ? startsWith(word) : isWord(word)
+        if (foundInLexicon) {
+
+            const regex = new RegExp('^' + word.replace(/\?/g, '[a-z]') + (sw ? '' : '$'));
+            // console.log(`FindWordInLexicon ${startsWith ? 'startsWith' : 'exact'} regex:`, regex);
+
+            // Will always succeed, because the trie is built from the word list and we check for existence first
+            const match = WordList70.find(word => regex.test(word));
+            // console.log(`FindWordInLexicon ${startsWith ? 'startsWith' : 'exact'}`, word, "=>", match);
+            return match;
+        }
+        return undefined;
+    }
+
     return new Promise<number>((resolve) => {
         const wordEl = document.querySelector('#word') as HTMLDivElement;
-        const tickEl = document.querySelector('.tick') as HTMLDivElement;
+        const submitButtonEl = document.querySelector('.submit-button') as HTMLDivElement;
+        const totalScoreEl = document.querySelector('#total-score') as HTMLDivElement;
+        const giveUpButtonEl = document.querySelector('.give-up-button') as HTMLDivElement;
         let totalScore = 0;
-        /// TODO: Make this do real stuff
-        tickEl.addEventListener('click', e => {
-            totalScore += parseInt(tickEl.innerText, 10);
+
+        type Model = {
+            deck: string[][]
+            candidateWord: string
+        }; // Model of the game state
+
+        type Play = string[];
+
+        let model: Model = { deck: [], candidateWord: "" };
+
+
+
+        /**
+         * Enumerate all possible "plays" starting from startingWord,
+         * by recursively popping from non-empty stacks, allowing blank tiles ("?" or " ") as wildcards.
+         * Each play records both the resulting word and the sequence of stacks used to build it.
+         */
+        function enumeratePlays(
+            startingWord: string = "xyz",
+            grid: string[][] = model.deck,
+            minWordLength: number = 3,
+            maxDepth: number = 10
+        ): { word: string, fromStack: number[] }[] {
+            const plays: { word: string, fromStack: number[] }[] = [];
+
+            function backtrack(
+                word: string,
+                stacks: string[][],
+                path: number[]
+            ) {
+                // Prune search if prefix is invalid
+                if (!startsWith(word)) return;
+
+                // If it's a valid word and long enough, record it
+                if (word.length >= minWordLength && isWord(word)) {
+                    plays.push({ word, fromStack: [...path] });
+                }
+
+                // Avoid runaway recursion
+                if (word.length >= maxDepth) return;
+
+                // Try popping from each non-empty stack
+                for (let i = 0; i < stacks.length; ++i) {
+                    if (stacks[i].length === 0) continue;
+
+                    // Copy stacks to avoid mutation
+                    const newStacks = stacks.map(arr => arr.slice());
+                    const letter = newStacks[i].pop()!;
+
+                    if (letter === "?" || letter === " ") {
+                        // Try every letter for a blank
+                        for (const ch of "abcdefghijklmnopqrstuvwxyz") {
+                            backtrack(word + ch, newStacks, [...path, i]);
+                        }
+                    } else {
+                        backtrack(word + letter, newStacks, [...path, i]);
+                    }
+                }
+            }
+
+            backtrack(startingWord, grid, []);
+            return plays;
+        }
+
+// Usage:
+
+
+        const updateModelFromDOM = () => {
+            model = { deck: [], candidateWord: "" };
+            /* for every column, add a new array to the model */
+            for (let c = 0; c < COLS; ++c) {
+                model.deck[c] = [];
+                // for every tile in the column, add the letter to the model
+                deckEl.querySelectorAll(`.scrabble-tile[data-column="${c}"]`).forEach(tileEl => {
+                        model.deck[c].push(getTileElementLetter(tileEl as HTMLDivElement).toLowerCase());
+                });
+
+            }
+            // Remove empty columns
+            for (let c = model.deck.length - 1; c >= 0; --c) {
+                if (model.deck[c].length === 0) {
+                    model.deck.splice(c, 1);
+                }
+            }
+
+            // Get the candidate word from the wordEl
+            model.candidateWord = candidateWord();
+            return model;
+        }
+
+        giveUpButtonEl.addEventListener('click', () => {
+            const plays = enumeratePlays(model.candidateWord);
+            console.log(plays);
+            const uniqueWords = [
+                ...new Set(plays.map(p => p.word))
+            ];
+            alert(uniqueWords.join("\n"));
+        });
+
+        /// This can only be called if there's a valid word in the wordEl, otherwise the submitButtonEl will  not be visible
+        submitButtonEl.addEventListener('click', e => {
+            if (submitButtonEl.classList.contains('active')) {
+                totalScore += parseInt(submitButtonEl.innerText, 10);
+            }
 
             playSoundEffect("selected3");
             resetTimerBar();
@@ -105,7 +271,7 @@ async function level(timeoutMs: number = 3000): Promise<number> {
         const observer = new MutationObserver((mutationList) => {
             mutationList.forEach(mutation => {
                 if (mutation.type === 'childList') {
-                    console.log(' Tiles added or removed:', mutation);
+                    // console.log(' Tiles added or removed:', mutation);
                     onWordElementChanged();
                 }
             });
@@ -116,52 +282,35 @@ async function level(timeoutMs: number = 3000): Promise<number> {
             subtree: false      // only direct children
         });
 
-        const onWordElementChanged = (): void => {
-            const updateMadeWord = (): string => {
-                const candidateWord = (): string => {
-                    let word = "";
+        const candidateWord = (): string => {
+            let word = "";
 
-                    // get the letters from word divs children
-                    const wordCells = Array.from(wordEl.children) as HTMLDivElement[];
-                    for (const cell of wordCells) {
-                        const letter = getTileElementLetter(cell);
-                        if (letter) {
-                            word += letter == " " ? "?" : letter; // Change blank tiles to wildcards
-                        }
-                    }
-                    return word.toLowerCase();
+            // get the letters from word divs children
+            const wordCells = Array.from(wordEl.children) as HTMLDivElement[];
+            for (const cell of wordCells) {
+                const letter = getTileElementLetter(cell);
+                if (letter) {
+                    word += letter == " " ? "?" : letter; // Change blank tiles to wildcards
                 }
-                const GetDictWord = (word: string): string | undefined => {
-                    if (word.length < MIN_WORD_LENGTH)
-                        return undefined;
-
-                    // Convert pattern to a regex: replace ? with .
-                    // Commented out is case-insensitive version (allowing Proper nouns)
-                    // const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$', 'i');
-
-                    const regex = new RegExp('^' + word.replace(/\?/g, '[a-z]') + '$');
-
-
-                    const match = WordList70.find(word => regex.test(word));
-                    console.log("GetDictWord", word, "=>", match);
-                    return match;
-
-                }
-
-                return GetDictWord(candidateWord()) || ""
-
-
             }
-            const madeWord = updateMadeWord()
+            return word.toLowerCase();
+        }
+
+        const onWordElementChanged = (): void => {
+
+            updateModelFromDOM();
+
+
+            const madeWord = FindWordInLexicon(candidateWord()) || ""
             // calculate score by summing the values of the letters in the word
             let score = Array.from(madeWord).reduce((acc, letter) => {
                 return acc + (scrabbleData[letter.toUpperCase()]?.value || 0);
             }, 0);
 
 
-            lookedUpWordEl.innerHTML = madeWord;
+            lookedUpWordEl.innerText = madeWord;
             bonusBadgeEl.innerHTML = "";
-            tickEl.className = 'tick'; // Reset tick element class
+            submitButtonEl.className = 'submit-button'; // Reset tick element class
             if (madeWord.length >= 10) {
                 score *= 5; // Bonus for long words
                 bonusBadgeEl.innerHTML = "x5!!";
@@ -178,14 +327,15 @@ async function level(timeoutMs: number = 3000): Promise<number> {
                 bonusBadgeEl.classList.add('x2');
             }
             if (score === 0 && deckEl.children.length > 0) {
-                tickEl.classList.remove('active');
+                submitButtonEl.classList.remove('active');
             } else {
-                tickEl.classList.add('active');
-                tickEl.innerText = `${score}`;
+                submitButtonEl.classList.add('active');
+                submitButtonEl.innerText = `${score}`;
                 if (madeWord.length < MIN_SCORING_WORD_LENGTH || score < MIN_SCORING_SCORE) {
-                    tickEl.classList.add('no-score');
+                    submitButtonEl.classList.add('no-score');
                 }
             }
+            totalScoreEl.innerText = `${totalScore}`; // Update total score
         }
 
 
@@ -573,6 +723,7 @@ function setReachedLevel(level: number): void {
 
 
 (async () => {
+
 // Init audio
     SoundEffect["selected"] = getBlip(1000, 0.01, 0.03);
     SoundEffect["selected2"] = getBlip(1250, 0.01, 0.03);
@@ -597,7 +748,7 @@ function setReachedLevel(level: number): void {
     oscTick.start();
 
     for (;;) {
-        const levelScore = await level(120_000);
+        const levelScore = await level(3600_000);
 
         await showModalDialog(`You scored ${levelScore}.<br> Play again?`);
     }
