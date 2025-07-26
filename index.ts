@@ -215,7 +215,6 @@ async function level(timeoutMs: number = 3_000): Promise<number> {
     validWordEl.appendChild(lookedUpWordEl);
     const bonusBadgeEl = document.createElement('span');
     bonusBadgeEl.id = 'bonus-badge';
-    bonusBadgeEl.className = 'starburst';
     validWordEl.appendChild(bonusBadgeEl);
     const submitButtonEl = document.createElement('span');
     submitButtonEl.className = 'submit-button';
@@ -511,12 +510,13 @@ async function level(timeoutMs: number = 3_000): Promise<number> {
                 return acc + (scrabbleData[letter.toUpperCase()]?.value || 0);
             }, 0);
 
-            if (word.length >= 10) {
+            if (word.length >= LENGTH_5X_WORD_SCORE) {
                 score *= 5; // Bonus for long words
-            } else if (word.length >= 9) {
+            } else if (word.length >= LENGTH_TRIPLE_WORD_SCORE) {
                 score *= 3; // Bonus for long words
-            } else if (word.length >= 7) {
-                score *= 2; // Bonus for long words
+            }
+            if (word.length >= LENGTH_FIFTY_BONUS) {
+                score += 50; // Bonus for long words
             }
             return score;
         }
@@ -531,22 +531,26 @@ async function level(timeoutMs: number = 3_000): Promise<number> {
 
             submitButtonEl.innerText = `${score}`;
             lookedUpWordEl.innerText = foundWord;
-            bonusBadgeEl.innerHTML = "";
+            bonusBadgeEl.innerText = "";
+            bonusBadgeEl.className = "hidden";
             submitButtonEl.className = 'submit-button'; // Reset tick element class
-            if (foundWord.length >= 10) {
 
-                bonusBadgeEl.innerHTML = "x5!!";
-                bonusBadgeEl.classList.add('x5!!!');
+            if (foundWord.length >= LENGTH_5X_WORD_SCORE) {
+
+                bonusBadgeEl.innerText += "x5!!!";
+                bonusBadgeEl.classList.add('x5');
                 // playSoundEffect("excellent");
-            } else if (foundWord.length >= 9) {
+            } else if (foundWord.length >= LENGTH_TRIPLE_WORD_SCORE) {
 
-                bonusBadgeEl.innerHTML = "x3!!";
+                bonusBadgeEl.innerText += "x3!!";
                 bonusBadgeEl.classList.add('x3');
 
-            } else if (foundWord.length >= 7) {
+            }
 
-                bonusBadgeEl.innerHTML = "x2!";
-                bonusBadgeEl.classList.add('x2');
+            if (foundWord.length >= LENGTH_FIFTY_BONUS) {
+
+                bonusBadgeEl.innerText += " +50!";
+                bonusBadgeEl.classList.add('starburst');
             }
             if (foundWord === "" && numTilesInDeck() > 0) {
                 submitButtonEl.classList.remove('active');
@@ -812,10 +816,13 @@ const MAX_COLUMN_HEIGHT = 12; // Maximum number of tiles in a column
 const COLS = 6; // Number of columns in the game grid
 const INITIAL_DEAL_TILES = 6 * COLS; // Number of tiles to deal at the start of the game
 const MIN_WORD_LENGTH = 3; // Minimum word length allowed
-const MAX_WORD_LENGTH_FOR_SEARCH = 8; // Maximum word length allowed for search (== search-depth during dfs)
+const MAX_WORD_LENGTH_FOR_SEARCH = 10; // Maximum word length allowed for search (== search-depth during dfs)
 const MIN_SCORING_WORD_LENGTH = 3; // Minimum word length to score
 const MIN_SCORING_SCORE = 10; // Minimum score to consider a word valid for scoring
 const MAX_GIVE_UPS = 1000; // Maximum number of give-ups allowed in a level
+const LENGTH_FIFTY_BONUS = 7; // Bonus for words of length 7 or more
+const LENGTH_TRIPLE_WORD_SCORE = 9; // Bonus for words of length 10 or more
+const LENGTH_5X_WORD_SCORE = 10; // Bonus for words of length 10 or more
 /**
  * Retrieve the persisted reached level (defaulting to 0).
  */
