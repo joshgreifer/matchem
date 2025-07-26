@@ -130,14 +130,13 @@
             min-height: 90vh;
             height: 90vh;
             box-sizing: border-box;
-            display: grid;
-            /*grid-template-rows: auto auto auto;*/
-            /*grid-template-columns: auto 1fr auto;*/
-            /*grid-template-rows: 1fr 64px 64px;*/
+            display: flex;
+            grid-template-rows: repeat(3, auto);
+
             grid-template-areas:
-                "deck deck timer-bar"
-                "build-word build-word unused"
-                "valid-word game-status unused";
+                "deck "
+                "word"
+                "status";
             align-items: center;
             text-align: center;
             /*margin: 5vh 5vw;*/
@@ -162,6 +161,18 @@
             flex-direction: column;
             justify-content: flex-end; /* bottom-align the tiles */
         }
+
+        .column > :not(:last-child) {
+
+            opacity: .7;
+
+        }
+
+        #word > :not(:last-child) {
+
+            opacity: .7;
+
+        }
         @font-face {
             font-family: 'Roboto', Arial, Verdana, sans-serif;
         }
@@ -171,7 +182,7 @@
             justify-self: end;
             height: 100%;
             width: 5px;
-            grid-area: timer-bar;
+            grid-area: deck;
             /*background: linear-gradient(to top, #ff0000 0%, #ff0000 10%, #0091c3 30%, #0091c3 90%, #00ff00 95%, #00ff00 100%);*/
 
         }
@@ -207,7 +218,7 @@
         }
 
         div#game-status {
-            grid-area: game-status;
+            grid-area: status;
             display: flex;
             flex-direction: row;
             align-items: center;
@@ -217,12 +228,15 @@
         div#valid-word {
             /*border: 1px solid red; !* while testing - remove later *!*/
 
-            grid-area: valid-word;
+            grid-area: word;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
         }
 
         .build-word-container {
 
-            grid-area: build-word;
+            grid-area: word;
             display: flex;
 
             /*justify-content: center;*/
@@ -234,8 +248,9 @@
 
         }
         #word {
-            width: calc(11 * var(--TILE_SIZE)); /* 10 tiles + 1px border */
+            /*width: calc(11 * var(--TILE_SIZE)); !* 10 tiles + 1px border *!*/
             height: var(--TILE_SIZE);
+            max-width: calc(5 * var(--TILE_SIZE));
             display: flex;
             flex-direction: row;
             align-items: center;   /* Optional: vertically center the tiles */
@@ -275,7 +290,7 @@
             font-size: calc( var(--TILE_SIZE) * .5 ); /* Adjust font size based on tile size */
             user-select: none;
         }
-        .scrabble-tile::after {
+        .scrabble-tile:not([data-value="0"])::after {
             content: attr(data-value);
             position: absolute;
             bottom: calc( var(--TILE_SIZE) / 6);
@@ -287,7 +302,9 @@
             /*opacity: 0.82;*/
             line-height: 1;
         }
-
+        .scrabble-tile.substituted {
+            color: #b1b1b1;
+        }
         div.selected {
             background: linear-gradient(135deg, #ff8585 0%, #ff0000 100%);
         }
@@ -360,9 +377,7 @@
         .starburst.x5 {
             background: yellow;
         }
-        /*#bonus-badge {*/
-        /*    width: 32px;*/
-        /*}*/
+
         .submit-button.active.no-score {
             background: linear-gradient(135deg, #afafaf 0%, #3a3a3a 100%);
             color: var(--text-color);

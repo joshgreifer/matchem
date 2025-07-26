@@ -186,8 +186,8 @@ async function level(timeoutMs: number = 3_000): Promise<number> {
         //     tileEl.className = (`scrabble-tile`); // Remove all animation classes
         //
         // };
-        tileEl.addEventListener('mousedown', touched)
-        tileEl.addEventListener('touchstart', touched)
+        tileEl.addEventListener('mousedown', onTileTouched)
+        tileEl.addEventListener('touchstart', onTileTouched)
         stockEl.appendChild(tileEl);
     }
 
@@ -205,23 +205,24 @@ async function level(timeoutMs: number = 3_000): Promise<number> {
     const wordEl = document.createElement('div');
     wordEl.id = 'word';
     buildWordContainerEl.appendChild(wordEl);
-    layoutEl.appendChild(buildWordContainerEl);
-
-// Valid Word
-    const validWordEl = document.createElement('div');
-    validWordEl.id = 'valid-word';
-    const lookedUpWordEl = document.createElement('span');
+    const lookedUpWordEl = document.createElement('div');
     lookedUpWordEl.id = 'looked-up-word';
-    validWordEl.appendChild(lookedUpWordEl);
-    const bonusBadgeEl = document.createElement('span');
+    buildWordContainerEl.appendChild(lookedUpWordEl);
+    const bonusBadgeEl = document.createElement('div');
     bonusBadgeEl.id = 'bonus-badge';
-    validWordEl.appendChild(bonusBadgeEl);
-    const submitButtonEl = document.createElement('span');
+    buildWordContainerEl.appendChild(bonusBadgeEl);
+    const submitButtonEl = document.createElement('div');
     submitButtonEl.className = 'submit-button';
     submitButtonEl.title = 'Click to confirm word';
     submitButtonEl.textContent = '✔'; // Unicode checkmark
-    validWordEl.appendChild(submitButtonEl);
-    layoutEl.appendChild(validWordEl);
+    buildWordContainerEl.appendChild(submitButtonEl);
+    layoutEl.appendChild(buildWordContainerEl);
+
+// // Valid Word
+//     const validWordEl = document.createElement('div');
+//     validWordEl.id = 'valid-word';
+//
+//     buildWordContainerEl.appendChild(validWordEl);
 
 // Game Status
     const gameStatusEl = document.createElement('div');
@@ -279,12 +280,16 @@ async function level(timeoutMs: number = 3_000): Promise<number> {
         return FLIP(tilesToAnimate as HTMLDivElement[], () => {newParent.appendChild(tileEl)}, durationMs);
 
     }
-    async function touched (e: Event) {
+    async function onTileTouched (e: Event) {
 
         e.preventDefault();
         e.stopPropagation();
-
-        await moveTile(<HTMLDivElement>e.currentTarget);
+        const el = e.target as HTMLDivElement;
+        if (el.classList.contains('substituted')) {
+            el.innerText = " "; // Change back to a blank tile
+            el.classList.remove('substituted'); // Remove any substitution class
+        }
+        await moveTile(el);
 
     }
 
@@ -447,7 +452,13 @@ async function level(timeoutMs: number = 3_000): Promise<number> {
 
             // move all tiles in the wordElement to the stockElement
             while (wordEl.firstChild) {
-                stockEl.appendChild(wordEl.firstChild);
+                const el = wordEl.firstChild as HTMLDivElement;
+
+                if (el.classList.contains('substituted')) {
+                    el.innerText = " "; // Change back to a blank tile
+                    el.classList.remove('substituted'); // Remove any substitution class
+                }
+                stockEl.appendChild(el);
                 dealTileFromStock();
             }
 
@@ -567,6 +578,34 @@ async function level(timeoutMs: number = 3_000): Promise<number> {
                     submitButtonEl.classList.add('no-score');
                 }
             }
+            const doSubstitution = foundWord !== "";
+
+            // find all the indexes in the candidate word of "?"
+            const blankIndexes = candidate.split('').reduce((acc, letter, index) => {
+                if (letter === '?') {
+                    acc.push(index);
+                }
+                return acc;
+            }, [] as number[]);
+            if (blankIndexes.length > 0) {
+                for (const index of blankIndexes) {
+
+                    // replace the ? with the letter from the found word
+                    const letter = foundWord[index];
+
+                    const tileEl = wordEl.children[index] as HTMLDivElement;
+                    if (doSubstitution) {
+                        // Don't set the data-letter attribute, otherwise it will be considered a  letter tile
+                        tileEl.innerText = letter.toUpperCase();
+                        tileEl.classList.add('substituted');
+                    } else {
+                        tileEl.innerText = " "; // Change back to a blank tile
+                        tileEl.classList.remove('substituted'); // Remove any substitution class
+                    }
+                }
+
+            }
+
             totalScoreEl.innerText = `${totalScore}`; // Update total score
         }
 
@@ -813,8 +852,8 @@ const showModalDialog = async (message: string) => {
 
 
 const MAX_COLUMN_HEIGHT = 12; // Maximum number of tiles in a column
-const COLS = 6; // Number of columns in the game grid
-const INITIAL_DEAL_TILES = 6 * COLS; // Number of tiles to deal at the start of the game
+const COLS = 10; // Number of columns in the game grid
+const INITIAL_DEAL_TILES = 10 * COLS; // Number of tiles to deal at the start of the game
 const MIN_WORD_LENGTH = 3; // Minimum word length allowed
 const MAX_WORD_LENGTH_FOR_SEARCH = 10; // Maximum word length allowed for search (== search-depth during dfs)
 const MIN_SCORING_WORD_LENGTH = 3; // Minimum word length to score
