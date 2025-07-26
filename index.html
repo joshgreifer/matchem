@@ -226,14 +226,7 @@
             justify-content: center;
             gap: 1em; /* Space between score, word, and submit-button */
         }
-        div#valid-word {
-            /*border: 1px solid red; !* while testing - remove later *!*/
 
-            grid-area: word;
-            display: flex;
-            flex-direction: row;
-            align-items: center;
-        }
 
         .build-word-container {
             box-sizing: border-box;
@@ -258,6 +251,7 @@
             /*width: calc(11 * var(--TILE_SIZE)); !* 10 tiles + 1px border *!*/
             height: var(--TILE_SIZE);
             max-width: calc(5 * var(--TILE_SIZE));
+            box-sizing: border-box;
             display: flex;
             flex-direction: row;
             align-items: center;   /* Optional: vertically center the tiles */
@@ -468,7 +462,8 @@
     <h2>Game Options</h2>
     <form id="game-options-form">
         <label>Use Giant Dictionary: <input type="checkbox" name="BIG_DIC"></label>
-        <label>Columns: <input name="COLS" type="number" min="2" max="10" value="7"></label>
+        <label>Allow Proper Nouns: <input type="checkbox" name="ALLOW_PROPER_NOUNS"></label>
+        <label>Columns: <input name="COLS" type="number" min="2" max="20" value="7"></label>
         <label>Initial Tiles: <input name="INITIAL_DEAL_TILES" type="number" min="1" max="200" value="49"></label>
         <label>Min Word Length: <input name="MIN_WORD_LENGTH" type="number" min="2" max="10" value="2"></label>
         <label>Max Word Length For Search: <input name="MAX_WORD_LENGTH_FOR_SEARCH" type="number" min="3" max="20" value="10"></label>

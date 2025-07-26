@@ -322,6 +322,9 @@ async function level(): Promise<number> {
             // console.log(`FindWordInLexicon ${startsWith ? 'startsWith' : 'exact'}`, word, "=>", match);
             return match;
         }
+        if (ALLOW_PROPER_NOUNS && word[0] === word[0].toLowerCase()) {
+            return FindWordInLexicon(word[0].toUpperCase() + word.slice(1), sw); // Try with first letter capitalized
+        }
         return undefined;
     }
 
@@ -879,6 +882,7 @@ let LENGTH_TRIPLE_WORD_SCORE = 9; // Bonus for words of length 10 or more
 let LENGTH_5X_WORD_SCORE = 10; // Bonus for words of length 10 or more
 let TIMER_BAR_DURATION = 60_000; // Duration of the timer bar animation in milliseconds
 let LEXICON = LEXICON95; // Use the 95 lexicon for word validation
+let ALLOW_PROPER_NOUNS = false; // Whether to allow proper nouns in the game
 /**
  * Retrieve the persisted reached level (defaulting to 0).
  */
@@ -904,6 +908,7 @@ async function showOptionsPanel() : Promise<void> {
             e.preventDefault();
             // Update game settings from form fields
             LEXICON = form.BIG_DIC.checked ? LEXICON95 : LEXICON40;
+            ALLOW_PROPER_NOUNS = form.ALLOW_PROPER_NOUNS.checked;
             COLS = parseInt(form.COLS.value, 10);
             INITIAL_DEAL_TILES = parseInt(form.INITIAL_DEAL_TILES.value, 10);
             MIN_WORD_LENGTH = parseInt(form.MIN_WORD_LENGTH.value, 10);
