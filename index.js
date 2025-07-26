@@ -102,7 +102,7 @@ function FLIP(els, mutator, duration) {
         }, duration + 50);
     });
 }
-async function level(timeoutMs = 3_000) {
+async function level() {
     const appEl = document.querySelector(`.app`);
     if (!appEl) {
         console.error(`Container element with class "app" not found.`);
@@ -239,7 +239,7 @@ async function level(timeoutMs = 3_000) {
         // Convert pattern to a regex: replace ? with .
         // Commented out is case-insensitive version (allowing Proper nouns)
         // const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$', 'i');
-        const foundInLexicon = sw ? startsWith(word, LEXICON95) : isWord(word, LEXICON95);
+        const foundInLexicon = sw ? startsWith(word, LEXICON) : isWord(word, LEXICON);
         if (foundInLexicon) {
             const regex = new RegExp('^' + word.replace(/\?/g, '[a-z]') + (sw ? '' : '$'));
             // console.log(`FindWordInLexicon ${startsWith ? 'startsWith' : 'exact'} regex:`, regex);
@@ -256,7 +256,7 @@ async function level(timeoutMs = 3_000) {
          * by recursively popping from non-empty stacks, allowing blank tiles ("?" or " ") as wildcards.
          * Each play records both the resulting word and the sequence of stacks used to build it.
          */
-        function enumeratePlays(startingWord = "xyz", lexicon = LEXICON40, grid = model.deck, minWordLength = MIN_WORD_LENGTH, maxDepth = MAX_WORD_LENGTH_FOR_SEARCH) {
+        function enumeratePlays(startingWord = "xyz", returnFirstWordFound = false, lexicon = LEXICON, grid = model.deck, minWordLength = MIN_WORD_LENGTH, maxDepth = MAX_WORD_LENGTH_FOR_SEARCH) {
             const plays = [];
             function backtrack(word, stacks, path) {
                 // Prune search if prefix is invalid
@@ -265,6 +265,10 @@ async function level(timeoutMs = 3_000) {
                 // If it's a valid word and long enough, record it
                 if (word.length >= minWordLength && isWord(word, lexicon)) {
                     plays.push({ word, fromStack: [...path] });
+                    if (returnFirstWordFound) {
+                        // If we only want the first valid word, return immediately
+                        return plays;
+                    }
                 }
                 // Avoid runaway recursion
                 if (word.length >= maxDepth)
@@ -290,7 +294,9 @@ async function level(timeoutMs = 3_000) {
             backtrack(startingWord, grid, []);
             return plays;
         }
-        // Usage:
+        function noMorePlays() {
+            return enumeratePlays("", true).length == 0;
+        }
         const updateModelFromDOM = () => {
             model = { deck: [], candidateWord: "" };
             /* for every column, add a new array to the model */
@@ -309,6 +315,13 @@ async function level(timeoutMs = 3_000) {
             // }
             // Get the candidate word from the wordEl
             model.candidateWord = candidateWord();
+            if (model.candidateWord.length === 0) {
+                if (noMorePlays()) {
+                    if (totalScore > 0)
+                        playSoundEffect("excellent");
+                    resolve(totalScore); // level finished
+                }
+            }
             return model;
         };
         async function giveUpButtonElClicked(e) {
@@ -351,12 +364,13 @@ async function level(timeoutMs = 3_000) {
         giveUpButtonEl.removeEventListener('click', giveUpButtonElClicked);
         giveUpButtonEl.addEventListener('click', giveUpButtonElClicked);
         const submitButtonElClicked = async (e) => {
+            lastWordTime = Date.now();
+            resetTimerBar();
             const score = parseInt(submitButtonEl.innerText, 10);
             if (submitButtonEl.classList.contains('active')) {
                 totalScore += score;
             }
             playSoundEffect("selected3");
-            resetTimerBar();
             // move all tiles in the wordElement to the stockElement
             while (wordEl.firstChild) {
                 const el = wordEl.firstChild;
@@ -366,11 +380,6 @@ async function level(timeoutMs = 3_000) {
                 }
                 stockEl.appendChild(el);
                 dealTileFromStock();
-            }
-            if (numTilesInDeck() == 0) {
-                if (score > 0)
-                    playSoundEffect("excellent");
-                resolve(totalScore); // level completed
             }
         };
         /// This can only be called if there's a valid word in the wordEl, otherwise the submitButtonEl will  not be visible
@@ -504,13 +513,10 @@ async function level(timeoutMs = 3_000) {
             return tileEl.dataset['letter'];
         };
         const userFoundWordBeforeTimeout = () => {
-            return Date.now() - lastWordTime < timeoutMs;
+            return Date.now() - lastWordTime < TIMER_BAR_DURATION;
         };
         const timeoutAction = () => {
-            if (!userFoundWordBeforeTimeout()) {
-                totalScore -= scoreWord(remainingTilesAsString());
-                resolve(totalScore);
-            }
+            resolve(totalScore);
         };
         async function dealTileFromStock() {
             // Get the first child of the stock element
@@ -538,11 +544,8 @@ async function level(timeoutMs = 3_000) {
         }
         const resetTimerBar = () => {
             const onBarEnd = () => {
-                timeoutAction();
-                fill.removeEventListener('animationend', onBarEnd);
+                resolve(totalScore);
             };
-            if (timeoutMs <= 0)
-                return;
             const fill = document.querySelector('.timer-fill');
             fill.removeEventListener('animationend', onBarEnd);
             fill.style.animation = '';
@@ -552,13 +555,12 @@ async function level(timeoutMs = 3_000) {
             fill.classList.add('animate');
             fill.addEventListener('animationend', onBarEnd, { once: true });
             // fill.addEventListener('animationend', () => alert("Foo"), {once: true});
-            lastWordTime = Date.now();
         };
         const setTimerBarTransitionTime = (milliSeconds) => {
             document.documentElement.style.setProperty('--TRANSITION_TIME', `${milliSeconds / 1000}s`);
         };
         initialDeal();
-        setTimerBarTransitionTime(timeoutMs);
+        setTimerBarTransitionTime(TIMER_BAR_DURATION);
         resetTimerBar();
         // Initialize score
         onViewChanged();
@@ -683,17 +685,18 @@ const showModalDialog = async (message) => {
     });
 };
 // 1) Define your levels in one place:
-const MAX_COLUMN_HEIGHT = 12; // Maximum number of tiles in a column
-const COLS = 7; // Number of columns in the game grid
-const INITIAL_DEAL_TILES = 7 * COLS; // Number of tiles to deal at the start of the game
-const MIN_WORD_LENGTH = 2; // Minimum word length allowed
-const MAX_WORD_LENGTH_FOR_SEARCH = 10; // Maximum word length allowed for search (== search-depth during dfs)
-const MIN_SCORING_WORD_LENGTH = 3; // Minimum word length to score
-const MIN_SCORING_SCORE = 10; // Minimum score to consider a word valid for scoring
-const MAX_GIVE_UPS = 1000; // Maximum number of give-ups allowed in a level
-const LENGTH_FIFTY_BONUS = 7; // Bonus for words of length 7 or more
-const LENGTH_TRIPLE_WORD_SCORE = 9; // Bonus for words of length 10 or more
-const LENGTH_5X_WORD_SCORE = 10; // Bonus for words of length 10 or more
+let COLS = 7; // Number of columns in the game grid
+let INITIAL_DEAL_TILES = 49; // Number of tiles to deal at the start of the game
+let MIN_WORD_LENGTH = 2; // Minimum word length allowed
+let MAX_WORD_LENGTH_FOR_SEARCH = 10; // Maximum word length allowed for search (== search-depth during dfs)
+let MIN_SCORING_WORD_LENGTH = 3; // Minimum word length to score
+let MIN_SCORING_SCORE = 10; // Minimum score to consider a word valid for scoring
+let MAX_GIVE_UPS = 1000; // Maximum number of give-ups allowed in a level
+let LENGTH_FIFTY_BONUS = 7; // Bonus for words of length 7 or more
+let LENGTH_TRIPLE_WORD_SCORE = 9; // Bonus for words of length 10 or more
+let LENGTH_5X_WORD_SCORE = 10; // Bonus for words of length 10 or more
+let TIMER_BAR_DURATION = 60_000; // Duration of the timer bar animation in milliseconds
+let LEXICON = LEXICON95; // Use the 95 lexicon for word validation
 /**
  * Retrieve the persisted reached level (defaulting to 0).
  */
@@ -707,6 +710,32 @@ function getReachedLevel() {
 function setReachedLevel(level) {
     localStorage.setItem('reached_level', String(level)); //
 }
+// Show options panel before starting game loop
+async function showOptionsPanel() {
+    return new Promise(resolve => {
+        const panel = document.getElementById('game-options-panel');
+        panel.style.display = '';
+        const form = document.getElementById('game-options-form');
+        form.onsubmit = function (e) {
+            e.preventDefault();
+            // Update game settings from form fields
+            LEXICON = form.BIG_DIC.checked ? LEXICON95 : LEXICON40;
+            COLS = parseInt(form.COLS.value, 10);
+            INITIAL_DEAL_TILES = parseInt(form.INITIAL_DEAL_TILES.value, 10);
+            MIN_WORD_LENGTH = parseInt(form.MIN_WORD_LENGTH.value, 10);
+            MAX_WORD_LENGTH_FOR_SEARCH = parseInt(form.MAX_WORD_LENGTH_FOR_SEARCH.value, 10);
+            MIN_SCORING_WORD_LENGTH = parseInt(form.MIN_SCORING_WORD_LENGTH.value, 10);
+            MIN_SCORING_SCORE = parseInt(form.MIN_SCORING_SCORE.value, 10);
+            MAX_GIVE_UPS = parseInt(form.MAX_GIVE_UPS.value, 10);
+            LENGTH_FIFTY_BONUS = parseInt(form.LENGTH_FIFTY_BONUS.value, 10);
+            LENGTH_TRIPLE_WORD_SCORE = parseInt(form.LENGTH_TRIPLE_WORD_SCORE.value, 10);
+            LENGTH_5X_WORD_SCORE = parseInt(form.LENGTH_5X_WORD_SCORE.value, 10);
+            TIMER_BAR_DURATION = parseInt(form.TIMER_BAR_DURATION.value, 10);
+            panel.style.display = 'none';
+            resolve();
+        };
+    });
+}
 (async () => {
     // Init audio
     SoundEffect["selected"] = getBlip(1000, 0.01, 0.03);
@@ -717,19 +746,23 @@ function setReachedLevel(level) {
     SoundEffect["excellent"] = await getAudioBufferFromFile('assets/audio/match_excellent.mp3');
     SoundEffect["ok"] = await getAudioBufferFromFile('assets/audio/match_ok.mp3');
     SoundEffect["clock-tick"] = await getAudioBufferFromFile('assets/audio/clock_tick.wav');
-    await showModalDialog("" +
-        "<p>Make words of three letters or more from the tiles at the bottom row. When you use a tile, the tile above it will become available.<p>" +
-        "<p>When you've made a word, click the  <span style='color:red'>score button</span> to score that word, or see if you keep going and make a longer word!.</p>" +
-        "<p>You can undo by clicking the last tile in the words you're building.</p>" +
-        "<p>If you finish all the tiles by making a word, you get a 200 point bonus!</p>");
+    // await showModalDialog("" +
+    //     "<p>Make words of three letters or more from the tiles at the bottom row. When you use a tile, the tile above it will become available.<p>" +
+    //     "<p>When you've made a word, click the  <span style='color:red'>score button</span> to score that word, or see if you keep going and make a longer word!.</p>" +
+    //     "<p>You can undo by clicking the last tile in the words you're building.</p>" +
+    //     "<p>If you finish all the tiles by making a word, you get a 200 point bonus!</p>"
+    //
+    //
+    // );
     // Keep soundbars from going into standby mode by playing a very high frequency sound
     // https://www.reddit.com/r/Soundbars/comments/nyxpzp/soundbar_standby_blocker_prevent_soundbar_from/?utm_source=chatgpt.com
     const oscTick = ctx.createOscillator();
     oscTick.frequency.value = ctx.sampleRate / 2 - 2; // Just below nyquist frequency
     oscTick.connect(ctx.destination);
     oscTick.start();
+    await showOptionsPanel();
     for (;;) {
-        const levelScore = await level(3600_000);
+        const levelScore = await level();
         await showModalDialog(`You scored ${levelScore}.<br> Play again?`);
     }
 })();

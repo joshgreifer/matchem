@@ -389,6 +389,71 @@
             color: var(--text-color);
         }
     </style>
+    <style id="options-panel-style">
+        .options-panel {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #fafaff;
+            color: #222; /* dark text */
+            border: 2px solid #bbb;
+            border-radius: 8px;
+            box-shadow: 0 8px 40px #0003;
+            padding: 2em 2.5em;
+            z-index: 1000;
+            min-width: 340px;
+        }
+
+        .options-panel h2 {
+            margin-top: 0;
+            margin-bottom: 1em;
+            font-size: 1.3em;
+            font-weight: bold;
+        }
+
+        .options-panel form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8em;
+        }
+
+        .options-panel label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 1em;
+            margin-bottom: 0; /* override any margin from before */
+        }
+
+        .options-panel input {
+            margin-left: 1em;
+            text-align: right;
+            width: 5em;
+            padding: 0.2em 0.5em;
+            border: 1px solid #bbb;
+            border-radius: 4px;
+            background: #fff;
+            color: #222;
+            font-size: 1em;
+        }
+
+        .options-panel button {
+            margin-top: 1.5em;
+            font-size: 1em;
+            padding: 0.5em 1.5em;
+            border: none;
+            background: #4074e0;
+            color: #fff;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .options-panel button:hover {
+            background: #2b4f91;
+        }
+
+    </style>
 </head>
 <body>
 <div class="app"></div>
@@ -399,6 +464,24 @@
     </div>
 </div>
 
+<div id="game-options-panel" class="options-panel">
+    <h2>Game Options</h2>
+    <form id="game-options-form">
+        <label>Use Giant Dictionary: <input type="checkbox" name="BIG_DIC"></label>
+        <label>Columns: <input name="COLS" type="number" min="2" max="10" value="7"></label>
+        <label>Initial Tiles: <input name="INITIAL_DEAL_TILES" type="number" min="1" max="200" value="49"></label>
+        <label>Min Word Length: <input name="MIN_WORD_LENGTH" type="number" min="2" max="10" value="2"></label>
+        <label>Max Word Length For Search: <input name="MAX_WORD_LENGTH_FOR_SEARCH" type="number" min="3" max="20" value="10"></label>
+        <label>Min Scoring Word Length: <input name="MIN_SCORING_WORD_LENGTH" type="number" min="2" max="10" value="3"></label>
+        <label>Min Scoring Score: <input name="MIN_SCORING_SCORE" type="number" min="1" max="100" value="10"></label>
+        <label>Max Give-Ups: <input name="MAX_GIVE_UPS" type="number" min="1" max="10000" value="1000"></label>
+        <label>Bonus (7+ letters): <input name="LENGTH_FIFTY_BONUS" type="number" min="1" max="20" value="7"></label>
+        <label>Triple Word (9+): <input name="LENGTH_TRIPLE_WORD_SCORE" type="number" min="1" max="20" value="9"></label>
+        <label>5x Word (10+): <input name="LENGTH_5X_WORD_SCORE" type="number" min="1" max="20" value="10"></label>
+        <label>Timer Duration (ms): <input name="TIMER_BAR_DURATION" type="number" min="5000" max="600000" value="60000"></label>
+        <button type="submit">Start Game</button>
+    </form>
+</div>
 
 
 </body>
