@@ -4,7 +4,28 @@
   "description": "None",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.joshgreifer.lexen",
+    "productName": "Lexen",
+    "files": [
+      "assets/**/*",
+      "main.js",
+      "index.html",
+      "index.js"
+    ],
+
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   },
   "repository": {
     "type": "git",
@@ -18,6 +39,7 @@
   },
   "homepage": "https://github.com/joshgreifer/matchem#readme",
   "devDependencies": {
-    "electron": "^37.2.4"
+    "electron": "^37.2.4",
+    "electron-builder": "^26.0.12"
   }
 }
