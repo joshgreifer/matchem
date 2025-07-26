@@ -124,7 +124,8 @@ async function level(timeoutMs = 3_000) {
     // Stock (containing the available tiles to deal) hidden for now
     const stockEl = document.createElement('div');
     stockEl.className = 'stock';
-    layoutEl.appendChild(stockEl);
+    document.body.appendChild(stockEl);
+    // layoutEl.appendChild(stockEl);
     // Fill the stock with tiles (one for each scrabble tile)
     const ScrabbleTiles = [];
     Object.values(scrabbleData).forEach(tile => {
@@ -161,17 +162,17 @@ async function level(timeoutMs = 3_000) {
     const wordEl = document.createElement('div');
     wordEl.id = 'word';
     buildWordContainerEl.appendChild(wordEl);
-    const lookedUpWordEl = document.createElement('div');
-    lookedUpWordEl.id = 'looked-up-word';
-    buildWordContainerEl.appendChild(lookedUpWordEl);
+    const wordScoreContainerEl = document.createElement('div');
+    wordScoreContainerEl.className = 'word-score-container';
+    buildWordContainerEl.appendChild(wordScoreContainerEl);
     const bonusBadgeEl = document.createElement('div');
     bonusBadgeEl.id = 'bonus-badge';
-    buildWordContainerEl.appendChild(bonusBadgeEl);
+    wordScoreContainerEl.appendChild(bonusBadgeEl);
     const submitButtonEl = document.createElement('div');
     submitButtonEl.className = 'submit-button';
     submitButtonEl.title = 'Click to confirm word';
     submitButtonEl.textContent = '✔'; // Unicode checkmark
-    buildWordContainerEl.appendChild(submitButtonEl);
+    wordScoreContainerEl.appendChild(submitButtonEl);
     layoutEl.appendChild(buildWordContainerEl);
     // // Valid Word
     //     const validWordEl = document.createElement('div');
@@ -211,10 +212,6 @@ async function level(timeoutMs = 3_000) {
         const tileCol = getTileElementColumn(tileEl);
         const columnEl = deckEl.children[tileCol];
         const parent = tileEl.parentElement;
-        if (tileEl != parent?.lastElementChild) {
-            playSoundEffect("undo");
-            return; // Only allow moving the last tile in the column or the word
-        }
         const newParent = parent.className.includes('column') ? wordEl : columnEl; // If it's a column, move to deck, otherwise stay in parent
         const tilesToAnimate = [...columnEl.children, tileEl];
         return FLIP(tilesToAnimate, () => { newParent.appendChild(tileEl); }, durationMs);
@@ -223,6 +220,11 @@ async function level(timeoutMs = 3_000) {
         e.preventDefault();
         e.stopPropagation();
         const el = e.target;
+        const parent = el.parentElement;
+        if (el != parent?.lastElementChild) {
+            playSoundEffect("undo");
+            return; // Only allow moving the last tile in the column or the word
+        }
         if (el.classList.contains('substituted')) {
             el.innerText = " "; // Change back to a blank tile
             el.classList.remove('substituted'); // Remove any substitution class
@@ -340,7 +342,7 @@ async function level(timeoutMs = 3_000) {
                     if (colIdx !== undefined) {
                         const tileEl = getLastColumnTile(colIdx);
                         if (tileEl) {
-                            await moveTile(tileEl, 250);
+                            await moveTile(tileEl, 200);
                         }
                     }
                 }
@@ -429,10 +431,15 @@ async function level(timeoutMs = 3_000) {
             const foundWord = FindWordInLexicon(candidate) || "";
             const score = scoreWord(candidate);
             submitButtonEl.innerText = `${score}`;
-            lookedUpWordEl.innerText = foundWord;
             bonusBadgeEl.innerText = "";
             bonusBadgeEl.className = "hidden";
             submitButtonEl.className = 'submit-button'; // Reset tick element class
+            if (foundWord === "") {
+                giveUpButtonEl.classList.remove('hidden');
+            }
+            else {
+                giveUpButtonEl.classList.add('hidden');
+            }
             if (foundWord.length >= LENGTH_5X_WORD_SCORE) {
                 bonusBadgeEl.innerText += "x5!!!";
                 bonusBadgeEl.classList.add('x5');
@@ -677,9 +684,9 @@ const showModalDialog = async (message) => {
 };
 // 1) Define your levels in one place:
 const MAX_COLUMN_HEIGHT = 12; // Maximum number of tiles in a column
-const COLS = 10; // Number of columns in the game grid
-const INITIAL_DEAL_TILES = 10 * COLS; // Number of tiles to deal at the start of the game
-const MIN_WORD_LENGTH = 3; // Minimum word length allowed
+const COLS = 7; // Number of columns in the game grid
+const INITIAL_DEAL_TILES = 7 * COLS; // Number of tiles to deal at the start of the game
+const MIN_WORD_LENGTH = 2; // Minimum word length allowed
 const MAX_WORD_LENGTH_FOR_SEARCH = 10; // Maximum word length allowed for search (== search-depth during dfs)
 const MIN_SCORING_WORD_LENGTH = 3; // Minimum word length to score
 const MIN_SCORING_SCORE = 10; // Minimum score to consider a word valid for scoring

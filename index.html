@@ -18,7 +18,7 @@
             --text-color: #ffffff;
             --dialog-background-color: #025771;
             --TRANSITION_TIME: 86400s;
-            --TILE_SIZE: 55px;
+            --TILE_SIZE: 44px;
         }
         html, body {
             font-family: moody-adolescent-regular,sans-serif;
@@ -129,26 +129,27 @@
             /*overflow: hidden;*/
             min-height: 90vh;
             height: 90vh;
+            width: 90vw;
             box-sizing: border-box;
-            display: flex;
-            grid-template-rows: repeat(3, auto);
+            display: grid;
+            grid-template-rows: repeat(3, 1fr);
 
             grid-template-areas:
                 "deck "
                 "word"
                 "status";
-            align-items: center;
+            /*align-items: center;*/
             text-align: center;
-            /*margin: 5vh 5vw;*/
+            margin-left: auto;
+            margin-right: auto;
 
         }
 
         .stock {
             position: absolute;
-            top: -100px;
-            left: 0;
-            display: none;
-
+            top: 50vw;
+            left: 50vw;
+            visibility: hidden;
         }
 
         .deck {
@@ -170,7 +171,7 @@
 
         #word > :not(:last-child) {
 
-            opacity: .7;
+            opacity: .9;
 
         }
         @font-face {
@@ -235,18 +236,24 @@
         }
 
         .build-word-container {
-
+            box-sizing: border-box;
             grid-area: word;
             display: flex;
 
             /*justify-content: center;*/
-            flex-direction:     row;
+            flex-direction:  row;
             align-items: center;
-            gap: 1em; /* Space between score, word, and submit-button */
-
-
+            justify-content: space-between;
+            min-width: 0px;
 
         }
+
+        .word-score-container {
+            display: flex;
+            align-items: center;
+            gap: 1em; /* Space between score and submit-button */
+        }
+
         #word {
             /*width: calc(11 * var(--TILE_SIZE)); !* 10 tiles + 1px border *!*/
             height: var(--TILE_SIZE);
@@ -331,18 +338,18 @@
         }
         @keyframes hintCycle {
 
-            0%   { transform: scale(150%); }
-            50% { transform: scale(175%); }
-            100% { transform: scale(150%); }
+            0%   { transform: scale(100%); }
+            50% { transform: scale(110%); }
+            100% { transform: scale(100%); }
         }
 
         .submit-button.active {
 
             vertical-align: middle;
             text-align: center;
-            width: 30px;
-            height: 30px;
-            line-height: 30px;
+            width: var(--TILE_SIZE);
+            height: var(--TILE_SIZE);
+            line-height:var(--TILE_SIZE);
             border-radius: 25%;
             background: linear-gradient(135deg, #f63737 0%, #550000 100%);
             display: inline-block;
@@ -350,14 +357,13 @@
             cursor: pointer;
             font-size: 1em;
             user-select: none;
-            margin-left: 30px;
             animation: hintCycle 1s ease-in-out infinite;
         }
 
         .starburst {
             width: 64px;
             height: 64px;
-            background: #54e0ff;
+            background: radial-gradient(#ffffff 0%, #003aff 100%);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -372,10 +378,10 @@
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
         }
         .starburst.x3 {
-            background: #ffffff;
+            background: radial-gradient(#ffffff 0%, #ff8500 100%);
         }
         .starburst.x5 {
-            background: yellow;
+            background: radial-gradient(#ffffff 0%, #ffe800 100%);
         }
 
         .submit-button.active.no-score {
