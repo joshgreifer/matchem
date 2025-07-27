@@ -489,9 +489,9 @@ async function level(): Promise<number> {
             lastWordTime = Date.now();
             resetTimerBar();
             const score = parseInt(submitButtonEl.innerText, 10);
-            if (submitButtonEl.classList.contains('active')) {
-                totalScore += score;
-            }
+
+            totalScore += score;
+
 
             playSoundEffect("selected3");
 

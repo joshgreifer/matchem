@@ -381,9 +381,7 @@ async function level() {
             lastWordTime = Date.now();
             resetTimerBar();
             const score = parseInt(submitButtonEl.innerText, 10);
-            if (submitButtonEl.classList.contains('active')) {
-                totalScore += score;
-            }
+            totalScore += score;
             playSoundEffect("selected3");
             // move all tiles in the wordElement to the stockElement
             while (wordEl.firstChild) {
