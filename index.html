@@ -324,7 +324,18 @@
         }
 
         .submit-button {
-            display: none;
+            vertical-align: middle;
+            text-align: center;
+            width: var(--TILE_SIZE);
+            height: var(--TILE_SIZE);
+            line-height:var(--TILE_SIZE);
+            border-radius: 25%;
+            background: linear-gradient(135deg, #afafaf 0%, #3a3a3a 100%);
+            color: var(--text-color);
+            display: inline-block;
+            cursor: pointer;
+            font-size: 1em;
+            user-select: none;
         }
 
         .hidden {
@@ -337,20 +348,8 @@
             100% { transform: scale(100%); }
         }
 
-        .submit-button.active {
-
-            vertical-align: middle;
-            text-align: center;
-            width: var(--TILE_SIZE);
-            height: var(--TILE_SIZE);
-            line-height:var(--TILE_SIZE);
-            border-radius: 25%;
+        .submit-button.is-word {
             background: linear-gradient(135deg, #f63737 0%, #550000 100%);
-            display: inline-block;
-            color: var(--text-color);
-            cursor: pointer;
-            font-size: 1em;
-            user-select: none;
             animation: hintCycle 1s ease-in-out infinite;
         }
 
@@ -378,8 +377,8 @@
             background: radial-gradient(#ffffff 0%, #ffe800 100%);
         }
 
-        .submit-button.active.no-score {
-            background: linear-gradient(135deg, #afafaf 0%, #3a3a3a 100%);
+        .submit-button.cant-make-a-word {
+            background: linear-gradient(135deg, #afafaf 0%, #bcb9b9 100%);
             color: var(--text-color);
         }
     </style>

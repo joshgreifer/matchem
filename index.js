@@ -231,25 +231,32 @@ async function level() {
         }
         await moveTile(el);
     }
-    const FindWordInLexicon = (word, sw = false) => {
-        if (word.length < MIN_WORD_LENGTH) {
-            // console.log(`FindWordInLexicon: word "${word}" is too short`);
-            return undefined; // Ignore words shorter than MIN_WORD_LENGTH
-        }
+    const toProperCase = (word) => {
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    };
+    const isProperCase = (word) => {
+        // Check if the first letter is uppercase and the rest are lowercase
+        return word.length > 0 && word[0] === word[0].toUpperCase() && word.slice(1) === word.slice(1).toLowerCase();
+    };
+    const dictionaryLookup = (word, lexicon, sw = false) => {
+        // if (word.length < MIN_WORD_LENGTH) {
+        //     // console.log(`dictionaryLookup: word "${word}" is too short`);
+        //     return undefined; // Ignore words shorter than MIN_WORD_LENGTH
+        // }
         // Convert pattern to a regex: replace ? with .
         // Commented out is case-insensitive version (allowing Proper nouns)
         // const regex = new RegExp('^' + word.replace(/\?/g, '.') + '$', 'i');
-        const foundInLexicon = sw ? startsWith(word, LEXICON) : isWord(word, LEXICON);
+        const foundInLexicon = sw ? startsWith(word, lexicon) : isWord(word, lexicon);
         if (foundInLexicon) {
             const regex = new RegExp('^' + word.replace(/\?/g, '[a-z]') + (sw ? '' : '$'));
-            // console.log(`FindWordInLexicon ${startsWith ? 'startsWith' : 'exact'} regex:`, regex);
+            // console.log(`dictionaryLookup ${startsWith ? 'startsWith' : 'exact'} regex:`, regex);
             // Will always succeed, because the trie is built from the word list and we check for existence first
             const match = WordList95.find(word => regex.test(word));
-            // console.log(`FindWordInLexicon ${startsWith ? 'startsWith' : 'exact'}`, word, "=>", match);
+            // console.log(`dictionaryLookup ${startsWith ? 'startsWith' : 'exact'}`, word, "=>", match);
             return match;
         }
-        if (ALLOW_PROPER_NOUNS && word[0] === word[0].toLowerCase()) {
-            return FindWordInLexicon(word[0].toUpperCase() + word.slice(1), sw); // Try with first letter capitalized
+        if (ALLOW_PROPER_NOUNS && !isProperCase(word)) {
+            return dictionaryLookup(toProperCase(word), lexicon, sw); // Try with first letter capitalized
         }
         return undefined;
     };
@@ -259,7 +266,7 @@ async function level() {
          * by recursively popping from non-empty stacks, allowing blank tiles ("?" or " ") as wildcards.
          * Each play records both the resulting word and the sequence of stacks used to build it.
          */
-        function enumeratePlays(startingWord = "xyz", returnFirstWordFound = false, lexicon = LEXICON, grid = model.deck, minWordLength = MIN_WORD_LENGTH, maxDepth = MAX_WORD_LENGTH_FOR_SEARCH) {
+        function enumeratePlays(startingWord = "xyz", returnFirstWordFound = false, lexicon = LEXICON_SMALL, grid = model.deck, minWordLength = MIN_WORD_LENGTH, maxDepth = MAX_WORD_LENGTH_FOR_SEARCH) {
             const plays = [];
             function backtrack(word, stacks, path) {
                 // Prune search if prefix is invalid
@@ -297,8 +304,8 @@ async function level() {
             backtrack(startingWord, grid, []);
             return plays;
         }
-        function noMorePlays() {
-            return enumeratePlays("", true).length == 0;
+        function noMorePlays(fromWord) {
+            return enumeratePlays(fromWord, true).length == 0;
         }
         const updateModelFromDOM = () => {
             model = { deck: [], candidateWord: "" };
@@ -319,7 +326,7 @@ async function level() {
             // Get the candidate word from the wordEl
             model.candidateWord = candidateWord();
             if (model.candidateWord.length === 0) {
-                if (noMorePlays()) {
+                if (noMorePlays("")) {
                     if (totalScore > 0)
                         playSoundEffect("excellent");
                     resolve(totalScore); // level finished
@@ -367,6 +374,10 @@ async function level() {
         giveUpButtonEl.removeEventListener('click', giveUpButtonElClicked);
         giveUpButtonEl.addEventListener('click', giveUpButtonElClicked);
         const submitButtonElClicked = async (e) => {
+            if (!submitButtonEl.classList.contains('is-word') || submitButtonEl.classList.contains('cant-make-a-word')) {
+                playSoundEffect("undo");
+                return; // Only allow submitting if the button is active, and not a cant-make-a-word
+            }
             lastWordTime = Date.now();
             resetTimerBar();
             const score = parseInt(submitButtonEl.innerText, 10);
@@ -440,49 +451,64 @@ async function level() {
         const onViewChanged = () => {
             updateModelFromDOM();
             const candidate = candidateWord();
-            const foundWord = FindWordInLexicon(candidate) || "";
+            let foundWord = "";
+            let isObscure = false;
+            let isStartOfSomeWord = false;
+            let isAWord = candidate.length >= MIN_WORD_LENGTH && isWord(candidate, LEXICON_SMALL);
+            if (!isAWord) {
+                isAWord = candidate.length >= MIN_WORD_LENGTH && isWord(candidate, LEXICON_LARGE);
+                if (isAWord)
+                    isObscure = true;
+            }
+            const lexicon = isObscure ? LEXICON_LARGE : LEXICON_SMALL;
+            if (!isAWord) { // perhaps it's the start of a word?
+                isStartOfSomeWord = startsWith(candidate, lexicon);
+            }
+            foundWord = dictionaryLookup(candidate, lexicon, isStartOfSomeWord) || ""; // Dictionary lookup always succeed, because we check for existence first
             const score = scoreWord(candidate);
             submitButtonEl.innerText = `${score}`;
             bonusBadgeEl.innerText = "";
             bonusBadgeEl.className = "hidden";
             submitButtonEl.className = 'submit-button'; // Reset tick element class
-            if (foundWord === "") {
+            if (!isAWord && !isStartOfSomeWord) {
+                submitButtonEl.classList.add('cant-make-a-word');
+            }
+            // Allow cheat only if the candidate word is not valid
+            if (!isAWord && giveUpsAllowed > 0 && !noMorePlays(candidate)) {
                 giveUpButtonEl.classList.remove('hidden');
             }
             else {
                 giveUpButtonEl.classList.add('hidden');
             }
-            if (foundWord.length >= LENGTH_5X_WORD_SCORE) {
-                bonusBadgeEl.innerText += "x5!!!";
-                bonusBadgeEl.classList.add('x5');
-                // playSoundEffect("excellent");
-            }
-            else if (foundWord.length >= LENGTH_TRIPLE_WORD_SCORE) {
-                bonusBadgeEl.innerText += "x3!!";
-                bonusBadgeEl.classList.add('x3');
-            }
-            if (foundWord.length >= LENGTH_FIFTY_BONUS) {
-                bonusBadgeEl.innerText += " +50!";
-                bonusBadgeEl.classList.add('starburst');
-            }
-            if (foundWord === "" && numTilesInDeck() > 0) {
-                submitButtonEl.classList.remove('active');
-            }
-            else {
-                submitButtonEl.classList.add('active');
-                if (numTilesInDeck() === 0) {
-                    if (foundWord === "") {
-                        submitButtonEl.innerText = `-${score}`;
-                    }
-                    else {
-                        submitButtonEl.innerText = `${score + 200}`; // Add bonus for finishing on a word
-                    }
+            if (isAWord) {
+                submitButtonEl.classList.add('is-word');
+                if (foundWord.length >= LENGTH_5X_WORD_SCORE) {
+                    bonusBadgeEl.innerText += "x5!!!";
+                    bonusBadgeEl.classList.add('x5');
+                    // playSoundEffect("excellent");
                 }
-                if (foundWord.length < MIN_SCORING_WORD_LENGTH || score < MIN_SCORING_SCORE) {
-                    submitButtonEl.classList.add('no-score');
+                else if (foundWord.length >= LENGTH_TRIPLE_WORD_SCORE) {
+                    bonusBadgeEl.innerText += "x3!!";
+                    bonusBadgeEl.classList.add('x3');
+                }
+                if (foundWord.length >= LENGTH_FIFTY_BONUS) {
+                    bonusBadgeEl.innerText += " +50!";
+                    bonusBadgeEl.classList.add('starburst');
                 }
             }
-            const doSubstitution = foundWord !== "";
+            if (numTilesInDeck() === 0) {
+                submitButtonEl.classList.add('is-word');
+                if (!isWord) {
+                    submitButtonEl.innerText = `-${score}`;
+                }
+                else {
+                    submitButtonEl.innerText = `${score + 200}`; // Add bonus for finishing on a word
+                }
+                // if (foundWord.length < MIN_SCORING_WORD_LENGTH || score < MIN_SCORING_SCORE) {
+                //     submitButtonEl.classList.add('cant-make-a-word');
+                // }
+            }
+            const doSubstitution = isAWord;
             // find all the indexes in the candidate word of "?"
             const blankIndexes = candidate.split('').reduce((acc, letter, index) => {
                 if (letter === '?') {
@@ -699,7 +725,8 @@ let LENGTH_FIFTY_BONUS = 7; // Bonus for words of length 7 or more
 let LENGTH_TRIPLE_WORD_SCORE = 9; // Bonus for words of length 10 or more
 let LENGTH_5X_WORD_SCORE = 10; // Bonus for words of length 10 or more
 let TIMER_BAR_DURATION = 60_000; // Duration of the timer bar animation in milliseconds
-let LEXICON = LEXICON95; // Use the 95 lexicon for word validation
+const LEXICON_LARGE = LEXICON95; // Use the 95 lexicon for obscure word validation
+const LEXICON_SMALL = LEXICON40; // Use the 40 lexicon for word validation
 let ALLOW_PROPER_NOUNS = false; // Whether to allow proper nouns in the game
 /**
  * Retrieve the persisted reached level (defaulting to 0).
@@ -723,7 +750,7 @@ async function showOptionsPanel() {
         form.onsubmit = function (e) {
             e.preventDefault();
             // Update game settings from form fields
-            LEXICON = form.BIG_DIC.checked ? LEXICON95 : LEXICON40;
+            // LEXICON = form.BIG_DIC.checked ? LEXICON95 : LEXICON40;
             ALLOW_PROPER_NOUNS = form.ALLOW_PROPER_NOUNS.checked;
             COLS = parseInt(form.COLS.value, 10);
             INITIAL_DEAL_TILES = parseInt(form.INITIAL_DEAL_TILES.value, 10);
