@@ -296,6 +296,9 @@ async function level(): Promise<Model> {
     const totalScoreEl = document.createElement('span');
     totalScoreEl.id = 'total-score';
     layoutEl.appendChild(totalScoreEl);
+    const streakEl = document.createElement('span');
+    streakEl.id = 'streak';
+    layoutEl.appendChild(streakEl);
 
 // Add the layout to the app element
     appEl!.appendChild(layoutEl);
@@ -674,7 +677,7 @@ async function level(): Promise<Model> {
             foundWord = dictionaryLookup(candidate, lexicon, isStartOfSomeWord) || "";  // Dictionary lookup always succeed, because we check for existence first
 
             const score = scoreWord(candidate);
-
+            streakEl.innerHTML = model.streakOfFives > 0 ? `Streak: <span class="streak">${model.streakOfFives}</span>` : "";
             submitButtonEl.innerText = `${score}`;
             bonusBadgeEl.innerText = "";
             bonusBadgeEl.className = "hidden";
@@ -986,13 +989,13 @@ let COLS = 7; // Number of columns in the game grid
 let INITIAL_DEAL_TILES = 49; // Number of tiles to deal at the start of the game
 let MIN_WORD_LENGTH = 2; // Minimum word length allowed
 let MAX_WORD_LENGTH_FOR_SEARCH = 10; // Maximum word length allowed for search (== search-depth during dfs)
-let MIN_SCORING_WORD_LENGTH = 3; // Minimum word length to score
-let MIN_SCORE_FOR_REMOVAL = 10; // Minimum score to you need to achieve to remove tiles from the board
-let INITIAL_HINTS = 0; // Initial number of hints in a level
+// let MIN_SCORING_WORD_LENGTH = 3; // Minimum word length to score
+// let MIN_SCORE_FOR_REMOVAL = 10; // Minimum score to you need to achieve to remove tiles from the board
+let INITIAL_HINTS = 1; // Initial number of hints in a level
 let LENGTH_FIFTY_BONUS = 7; // Bonus for words of length 7 or more
 let LENGTH_TRIPLE_WORD_SCORE = 9; // Bonus for words of length 10 or more
 let LENGTH_5X_WORD_SCORE = 10; // Bonus for words of length 10 or more
-let TIMER_BAR_DURATION = 600_000; // Duration of the timer bar animation in milliseconds
+let TIMER_BAR_DURATION = 120_000; // Duration of the timer bar animation in milliseconds
 const LEXICON_LARGE = LEXICON95; // Use the 95 lexicon for obscure word validation
 const LEXICON_SMALL = LEXICON40; // Use the 40 lexicon for word validation
 let ALLOW_PROPER_NOUNS = false; // Whether to allow proper nouns in the game
@@ -1022,18 +1025,18 @@ async function showOptionsPanel() : Promise<void> {
             e.preventDefault();
             // Update game settings from form fields
             // LEXICON = form.BIG_DIC.checked ? LEXICON95 : LEXICON40;
-            ALLOW_PROPER_NOUNS = form.ALLOW_PROPER_NOUNS.checked;
+            // ALLOW_PROPER_NOUNS = form.ALLOW_PROPER_NOUNS.checked;
             COLS = parseInt(form.COLS.value, 10);
             INITIAL_DEAL_TILES = parseInt(form.INITIAL_DEAL_TILES.value, 10);
             MIN_WORD_LENGTH = parseInt(form.MIN_WORD_LENGTH.value, 10);
             MAX_WORD_LENGTH_FOR_SEARCH = parseInt(form.MAX_WORD_LENGTH_FOR_SEARCH.value, 10);
-            MIN_SCORING_WORD_LENGTH = parseInt(form.MIN_SCORING_WORD_LENGTH.value, 10);
-            MIN_SCORE_FOR_REMOVAL = parseInt(form.MIN_SCORING_SCORE.value, 10);
-            INITIAL_HINTS = parseInt(form.INITIAL_HINTS.value, 10);
-            LENGTH_FIFTY_BONUS = parseInt(form.LENGTH_FIFTY_BONUS.value, 10);
-            LENGTH_TRIPLE_WORD_SCORE = parseInt(form.LENGTH_TRIPLE_WORD_SCORE.value, 10);
-            LENGTH_5X_WORD_SCORE = parseInt(form.LENGTH_5X_WORD_SCORE.value, 10);
-            TIMER_BAR_DURATION = parseInt(form.TIMER_BAR_DURATION.value, 10) * 1000; // Convert seconds to milliseconds
+            // MIN_SCORING_WORD_LENGTH = parseInt(form.MIN_SCORING_WORD_LENGTH.value, 10);
+            // MIN_SCORE_FOR_REMOVAL = parseInt(form.MIN_SCORING_SCORE.value, 10);
+            // INITIAL_HINTS = parseInt(form.INITIAL_HINTS.value, 10);
+            // LENGTH_FIFTY_BONUS = parseInt(form.LENGTH_FIFTY_BONUS.value, 10);
+            // LENGTH_TRIPLE_WORD_SCORE = parseInt(form.LENGTH_TRIPLE_WORD_SCORE.value, 10);
+            // LENGTH_5X_WORD_SCORE = parseInt(form.LENGTH_5X_WORD_SCORE.value, 10);
+            // TIMER_BAR_DURATION = parseInt(form.TIMER_BAR_DURATION.value, 10) * 1000; // Convert seconds to milliseconds
             panel.style.display = 'none';
             resolve();
         }
