@@ -506,22 +506,19 @@ async function level(): Promise<Model> {
 
             return model;
         }
+
+        function pulseElement(el: HTMLDivElement) {
+            el.classList.remove('pulse');
+            void el.offsetWidth;
+            el.classList.add('pulse');
+            el.addEventListener('animationend', () => {
+                el.classList.remove('pulse');
+            }, { once: true });
+        }
+
         async function hintButtonElClicked(e:MouseEvent)  {
 
 
-            // const uniqueWords = [
-            //     ...new Set(plays.map(p => p.word))
-            // ];
-
-
-            // alert(
-            //     uniqueWords
-            //         .map(word => ({ word, score: scoreWord(word) }))
-            //         .sort((a, b) => b.score - a.score)
-            //         .map(({ score, word }) => `${score} - ${word}`)
-            //         .join('\n')
-            // );
-            // alert(uniqueWords.join("\n"));
             if (hintsRemaining <= 0) {
                 await playSoundEffect("undo");
             } else {
@@ -571,7 +568,7 @@ async function level(): Promise<Model> {
                     ++hintsRemaining;
                     model.streakOfFives = 0; // Reset streak after bonus
                     hintButtonEl.dataset['hintsLeft'] = `${hintsRemaining}`;
-                    hintButtonEl.classList.remove('hidden');
+                    pulseElement(hintButtonEl);
                 }
             } else {
                 model.streakOfFives = 0;
