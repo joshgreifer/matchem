@@ -508,8 +508,7 @@ async function level(): Promise<Model> {
         }
         async function hintButtonElClicked(e:MouseEvent)  {
 
-            const plays = enumeratePlays(model.candidateWord);
-            console.log(plays);
+
             // const uniqueWords = [
             //     ...new Set(plays.map(p => p.word))
             // ];
@@ -523,12 +522,17 @@ async function level(): Promise<Model> {
             //         .join('\n')
             // );
             // alert(uniqueWords.join("\n"));
-            if (plays.length === 0 || hintsRemaining <= 0) {
+            if (hintsRemaining <= 0) {
                 await playSoundEffect("undo");
             } else {
-                if (--hintsRemaining <= 0) {
-                    hintButtonEl.classList.add('hidden');
+                --hintsRemaining;
+                while (wordEl.lastChild) {
+                    const el = wordEl.lastChild as HTMLDivElement;
+                    moveTile(el);
                 }
+                updateModelFromDOM();
+                const plays = enumeratePlays("");
+                console.log(plays);
                 hintButtonEl.dataset['hintsLeft'] = `${hintsRemaining}`;
                 const bestPlay = plays
                     .map(play => ({...play, score: scoreWord(play.word)}))
@@ -685,11 +689,11 @@ async function level(): Promise<Model> {
             }
 
             // Allow cheat only if the candidate word is not valid
-            if (!isAWord && hintsRemaining > 0 && !noMorePlays(candidate)) {
-                hintButtonEl.classList.remove('hidden');
-            } else {
-                hintButtonEl.classList.add('hidden');
-            }
+            // if (!isAWord && hintsRemaining > 0 && !noMorePlays(candidate)) {
+            //     hintButtonEl.classList.remove('hidden');
+            // } else {
+            //     hintButtonEl.classList.add('hidden');
+            // }
 
             if (isAWord) {
                 submitButtonEl.classList.add('is-word');
