@@ -136,9 +136,17 @@ function FLIP(
 }
 
 
+type GameOverReason = "timeout" | "no more plays" | "give up";
+type Model = {
+    gameOverReason: string;
+    deck: string[][];
+    candidateWord: string;
+    totalScore: number;
+    penalty: number;
+    streakOfFives: number; // Number of consecutive 5-letter words played
+}; // Model of the game state
 
-
-async function level(): Promise<number> {
+async function level(): Promise<Model> {
 
     const appEl = document.querySelector(`.app`)! as HTMLDivElement;
     if (!appEl) {
@@ -149,6 +157,51 @@ async function level(): Promise<number> {
     const layoutEl = document.createElement('div');
     layoutEl.id = 'layout';
 
+// Stock (containing the available tiles to deal) hidden for now
+    const stockEl = document.createElement('div');
+    stockEl.className = 'stock';
+    // document.body.appendChild(stockEl);
+    layoutEl.appendChild(stockEl);
+
+    // Any tiles added to the stock will be rotated randomly, and reset when removed
+    new MutationObserver((mutationList) => {
+        for (const mutation of mutationList) {
+            if (mutation.type === 'childList') {
+                // Use mutation.target as the container being mutated
+                const container = mutation.target as HTMLElement;
+                const STOCK_W = container.clientWidth;
+                const STOCK_H = container.clientHeight;
+                const TILE_W = 56, TILE_H = 56;
+                const SCALE = 0.5;
+
+                // Added nodes
+                mutation.addedNodes.forEach(node => {
+
+                    const tileW = TILE_W * SCALE;
+                    const tileH = TILE_H * SCALE;
+                    const x = Math.random() * (STOCK_W - tileW);
+                    const y = Math.random() * (STOCK_H - tileH);
+                    const rot = (Math.random() * 80) - 40;
+                    const el = node as HTMLDivElement;
+                    el.style.left = `${x}px`;
+                    el.style.top = `${y}px`;
+                    el.style.transform = `rotate(${rot}deg) scale(${SCALE})`;
+                    el.style.transformOrigin = 'center center';
+
+                });
+                // Removed nodes
+                mutation.removedNodes.forEach(node => {
+
+                    const el = node as HTMLDivElement;
+                    el.style.left = '';
+                    el.style.top = '';
+                    el.style.transform = '';
+                    el.style.transformOrigin = '';
+
+                });
+            }
+        }
+    }).observe(stockEl, { childList: true, subtree: false });
 
 
 // Deck
@@ -163,11 +216,7 @@ async function level(): Promise<number> {
         deckEl.appendChild(columnEl);
     }
 
-// Stock (containing the available tiles to deal) hidden for now
-    const stockEl = document.createElement('div');
-    stockEl.className = 'stock';
-    document.body.appendChild(stockEl);
-    // layoutEl.appendChild(stockEl);
+
 
 // Fill the stock with tiles (one for each scrabble tile)
     const ScrabbleTiles: TileInfo[] = [];
@@ -236,10 +285,10 @@ async function level(): Promise<number> {
     const gameStatusEl = document.createElement('div');
     gameStatusEl.id = 'game-status';
     const gameStatusSpan = document.createElement('span');
-    const giveUpButtonEl = document.createElement('button');
-    giveUpButtonEl.className = 'give-up-button';
-    giveUpButtonEl.textContent = `Give Up (${MAX_GIVE_UPS})`;
-    gameStatusSpan.appendChild(giveUpButtonEl);
+    const hintButtonEl = document.createElement('div');
+    hintButtonEl.className = 'hint-button';
+    hintButtonEl.dataset['hintsLeft'] = `${INITIAL_HINTS}`;
+    gameStatusSpan.appendChild(hintButtonEl);
     gameStatusEl.appendChild(gameStatusSpan);
     layoutEl.appendChild(gameStatusEl);
 
@@ -252,22 +301,42 @@ async function level(): Promise<number> {
     appEl!.appendChild(layoutEl);
 
 
-    let totalScore = 0;
-    let lastWordTime = 0;
-    let giveUpsAllowed = MAX_GIVE_UPS; // Number of give-ups allowed in a level
-
-    type Model = {
-        deck: string[][]
-        candidateWord: string
-    }; // Model of the game state
 
 
+    let hintsRemaining = INITIAL_HINTS; // Number of hints allowed in a level
 
-    let model: Model = { deck: [], candidateWord: "" };
 
-    function numTilesInDeck(): number {
-        return [...deckEl.children].reduce((sum, col) => sum + col.children.length, 0)
+    function gameOver(): boolean {
+        return model.gameOverReason !== "";
     }
+
+    let model: Model = { deck: [], candidateWord: "", gameOverReason: "", penalty: 0, totalScore: 0, streakOfFives: 0 };
+
+    function numDeckTiles(): number {
+        return [...deckEl.children].reduce((sum, col) => sum + col.children.length, 0);
+    }
+
+    function getTotalValueOfTiles(tileEls: HTMLDivElement[]): number {
+        return tileEls.reduce((sum, tileEl) => {
+            const value = parseInt(tileEl.dataset['value'] || "0", 10);
+            return sum + value;
+        }, 0);
+    }
+
+    function deckTiles(): HTMLDivElement[] {
+        return [...deckEl.children].reduce((tiles, col) => {
+            return tiles.concat([...col.children] as HTMLDivElement[]);
+        }, [] as HTMLDivElement[]);
+    }
+
+    function stockTiles(): HTMLDivElement[] {
+        return [...stockEl.children] as HTMLDivElement[];
+    }
+
+    function wordTiles(): HTMLDivElement[] {
+        return [...wordEl.children] as HTMLDivElement[];
+    }
+
 
     function getTileElementColumn(tileEl: HTMLDivElement): number {
         return parseInt(tileEl.dataset['column'] || "0", 10);
@@ -340,7 +409,7 @@ async function level(): Promise<number> {
         return undefined;
     }
 
-    return new Promise<number>((resolve) => {
+    return new Promise<Model>((resolve) => {
 
         /**
          * Enumerate all possible "plays" starting from startingWord,
@@ -408,7 +477,11 @@ async function level(): Promise<number> {
 
 
         const updateModelFromDOM = () => {
-            model = { deck: [], candidateWord: "" };
+
+            model.gameOverReason = ""; // Reset the game over reason
+
+
+            model.deck = [];
             /* for every column, add a new array to the model */
             for (let c = 0; c < COLS; ++c) {
                 model.deck[c] = [];
@@ -418,25 +491,22 @@ async function level(): Promise<number> {
                 });
 
             }
-            // Remove empty columns
-            // for (let c = model.deck.length - 1; c >= 0; --c) {
-            //     if (model.deck[c].length === 0) {
-            //         model.deck.splice(c, 1);
-            //     }
-            // }
 
+            if (noMorePlays("") && wordTiles().length === 0) {
+
+                model.gameOverReason = "no more plays";
+                // get the total value of all remaining tiles
+                const penaltyTiles =
+                    INFINITE_GAME ? [...wordTiles(), ...deckTiles()] : [...stockTiles(), ...wordTiles(), ...deckTiles()];
+
+                model.penalty = getTotalValueOfTiles(penaltyTiles);
+            }
             // Get the candidate word from the wordEl
             model.candidateWord = candidateWord();
-            if (model.candidateWord.length === 0) {
-                if (noMorePlays("")) {
-                    if (totalScore > 0)
-                        playSoundEffect("excellent");
-                    resolve(totalScore);   // level finished
-                }
-            }
+
             return model;
         }
-        async function giveUpButtonElClicked(e:MouseEvent)  {
+        async function hintButtonElClicked(e:MouseEvent)  {
 
             const plays = enumeratePlays(model.candidateWord);
             console.log(plays);
@@ -453,13 +523,13 @@ async function level(): Promise<number> {
             //         .join('\n')
             // );
             // alert(uniqueWords.join("\n"));
-            if (plays.length === 0 || giveUpsAllowed <= 0) {
+            if (plays.length === 0 || hintsRemaining <= 0) {
                 await playSoundEffect("undo");
             } else {
-                if (--giveUpsAllowed <= 0) {
-                    giveUpButtonEl.className = 'hidden';
+                if (--hintsRemaining <= 0) {
+                    hintButtonEl.classList.add('hidden');
                 }
-                giveUpButtonEl.textContent = `Give Up (${giveUpsAllowed})`;
+                hintButtonEl.dataset['hintsLeft'] = `${hintsRemaining}`;
                 const bestPlay = plays
                     .map(play => ({...play, score: scoreWord(play.word)}))
                     .sort((a, b) => b.score - a.score)[0];
@@ -476,24 +546,41 @@ async function level(): Promise<number> {
             }
         }
 
-        giveUpButtonEl.removeEventListener('click', giveUpButtonElClicked);
-        giveUpButtonEl.addEventListener('click', giveUpButtonElClicked);
+        hintButtonEl.removeEventListener('click', hintButtonElClicked);
+        hintButtonEl.addEventListener('click', hintButtonElClicked);
 
 
         const submitButtonElClicked = async (e: MouseEvent) => {
 
+            // Only allow submitting if the current word is valid, or if letters can be added to it to make a valid word
             if (!submitButtonEl.classList.contains('is-word')  || submitButtonEl.classList.contains('cant-make-a-word')) {
                 playSoundEffect("undo");
-                return; // Only allow submitting if the button is active, and not a cant-make-a-word
+                return;
             }
-            lastWordTime = Date.now();
+// From copilot
+            // Track streak of consecutive 5+ letter words
+            if (model.candidateWord.length >= 5) {
+                model.streakOfFives++;
+                console.log(model.candidateWord, "-> Streak of fives increased", model.streakOfFives);
+
+                if (model.streakOfFives === 5) {
+                    ++hintsRemaining;
+                    model.streakOfFives = 0; // Reset streak after bonus
+                    hintButtonEl.dataset['hintsLeft'] = `${hintsRemaining}`;
+                    hintButtonEl.classList.remove('hidden');
+                }
+            } else {
+                model.streakOfFives = 0;
+            }
+// end from copilot
+
             resetTimerBar();
             const score = parseInt(submitButtonEl.innerText, 10);
 
-            totalScore += score;
+            model.totalScore += score;
 
-
-            playSoundEffect("selected3");
+            const soundToPlay = score >= 50 ? "excellent" : score >= 50 ? "good" : score >= 10 ? "ok" : "selected3";
+            playSoundEffect(soundToPlay);
 
 
             // move all tiles in the wordElement to the stockElement
@@ -504,7 +591,14 @@ async function level(): Promise<number> {
                     el.innerText = " "; // Change back to a blank tile
                     el.classList.remove('substituted'); // Remove any substitution class
                 }
-                stockEl.appendChild(el);
+                if (INFINITE_GAME) {
+                    stockEl.insertBefore(el, stockEl.firstChild);
+                    // stockEl.appendChild(el);
+                } else {
+                    el.remove();
+                }
+                // If the word has too low a score, we keep dealing.
+                // if (score < MIN_SCORE_FOR_REMOVAL)
                 dealTileFromStock();
             }
 
@@ -514,19 +608,15 @@ async function level(): Promise<number> {
         submitButtonEl.removeEventListener('click', submitButtonElClicked );
         submitButtonEl.addEventListener('click', submitButtonElClicked );
 
-        const observer = new MutationObserver((mutationList) => {
+        new MutationObserver((mutationList) => {
             mutationList.forEach(mutation => {
                 if (mutation.type === 'childList') {
                     // console.log(' Tiles added or removed:', mutation);
                     onViewChanged();
                 }
             });
-        });
+        }).observe(wordEl, { childList: true,  subtree: false  });
 
-        observer.observe(wordEl, {
-            childList: true,    // watch for added/removed child nodes
-            subtree: false      // only direct children
-        });
 
         const candidateWord = (): string => {
             let word = "";
@@ -542,16 +632,6 @@ async function level(): Promise<number> {
             return word.toLowerCase();
         }
 
-        const remainingTilesAsString = (): string => {
-            // Get all tiles in the deck and concatenate their letters
-            return Array.from(deckEl.children)
-                    .map(tile => getTileElementLetter(tile as HTMLDivElement))
-                    .join('')
-                + Array.from(wordEl.children)
-                    .map(tile => getTileElementLetter(tile as HTMLDivElement))
-                    .join('');
-
-        }
         const scoreWord = (word: string): number => {
             // calculate score by summing the values of the letters in the word
             let score = Array.from(word).reduce((acc, letter) => {
@@ -573,6 +653,8 @@ async function level(): Promise<number> {
         const onViewChanged = (): void => {
 
             updateModelFromDOM();
+
+
 
             const candidate = candidateWord();
             let foundWord = "";
@@ -599,13 +681,14 @@ async function level(): Promise<number> {
 
             if (!isAWord && !isStartOfSomeWord) {
                 submitButtonEl.classList.add('cant-make-a-word');
+
             }
 
             // Allow cheat only if the candidate word is not valid
-            if (!isAWord && giveUpsAllowed > 0 && !noMorePlays(candidate)) {
-                giveUpButtonEl.classList.remove('hidden');
+            if (!isAWord && hintsRemaining > 0 && !noMorePlays(candidate)) {
+                hintButtonEl.classList.remove('hidden');
             } else {
-                giveUpButtonEl.classList.add('hidden');
+                hintButtonEl.classList.add('hidden');
             }
 
             if (isAWord) {
@@ -613,36 +696,25 @@ async function level(): Promise<number> {
 
                 if (foundWord.length >= LENGTH_5X_WORD_SCORE) {
 
-                     bonusBadgeEl.innerText += "x5!!!";
-                     bonusBadgeEl.classList.add('x5');
-                     // playSoundEffect("excellent");
-                 } else if (foundWord.length >= LENGTH_TRIPLE_WORD_SCORE) {
+                    bonusBadgeEl.innerText += "x5!!!";
+                    bonusBadgeEl.classList.add('x5');
+                    // playSoundEffect("excellent");
+                } else if (foundWord.length >= LENGTH_TRIPLE_WORD_SCORE) {
 
-                     bonusBadgeEl.innerText += "x3!!";
-                     bonusBadgeEl.classList.add('x3');
+                    bonusBadgeEl.innerText += "x3!!";
+                    bonusBadgeEl.classList.add('x3');
 
-                 }
-
-                 if (foundWord.length >= LENGTH_FIFTY_BONUS) {
-
-                     bonusBadgeEl.innerText += " +50!";
-                     bonusBadgeEl.classList.add('starburst');
-                 }
-
-             }
-            if (numTilesInDeck() === 0) {
-                submitButtonEl.classList.add('is-word');
-
-                if (!isWord) {
-                    submitButtonEl.innerText = `-${score}`;
-                } else {
-                    submitButtonEl.innerText = `${score + 200}`; // Add bonus for finishing on a word
                 }
 
-                // if (foundWord.length < MIN_SCORING_WORD_LENGTH || score < MIN_SCORING_SCORE) {
-                //     submitButtonEl.classList.add('cant-make-a-word');
-                // }
+                if (foundWord.length >= LENGTH_FIFTY_BONUS) {
+
+                    bonusBadgeEl.innerText += " +50!";
+                    bonusBadgeEl.classList.add('starburst');
+                }
+
             }
+            // If there are no more tiles remaining, we can submit the "word" even if it's not a valid word, but the score will be negative
+
             const doSubstitution = isAWord;
 
             // find all the indexes in the candidate word of "?"
@@ -670,8 +742,11 @@ async function level(): Promise<number> {
                 }
 
             }
-
-            totalScoreEl.innerText = `${totalScore}`; // Update total score
+            if (gameOver() && !isAWord) {
+                resolve(model);
+                return;
+            }
+            totalScoreEl.innerText = `${model.totalScore}`; // Update total score
         }
 
         const getLastColumnTile = (c: number): HTMLDivElement | undefined => {
@@ -683,21 +758,15 @@ async function level(): Promise<number> {
             return tileEl.dataset['letter']!;
         }
 
-        const userFoundWordBeforeTimeout = (): boolean => {
-            return Date.now() - lastWordTime < TIMER_BAR_DURATION
-        }
-
-        const timeoutAction = () => {
-            resolve(totalScore);
-        }
 
         async function dealTileFromStock(): Promise<void> {
-// Get the first child of the stock element
-            const tileToDeal = stockEl.firstElementChild as HTMLDivElement | null;
+            // Get the first child of the stock element
+            const tileToDeal = stockEl.lastElementChild as HTMLDivElement | null;
             if (!tileToDeal) {
-                console.warn("No tiles left in stock to deal.");
+                // console.warn("No tiles left in stock to deal.");
                 return;
             }
+
             // Find the column with the least tiles
             const columns = Array.from(deckEl.querySelectorAll('.column'));
             const columnHeights = columns.map(col => col.children.length);
@@ -719,7 +788,8 @@ async function level(): Promise<number> {
 
         const resetTimerBar = () => {
             const onBarEnd = () => {
-                resolve(totalScore);
+                model.gameOverReason = "timeout";
+                resolve(model);
             }
 
             const fill = document.querySelector('.timer-fill') as HTMLElement;
@@ -916,15 +986,16 @@ let INITIAL_DEAL_TILES = 49; // Number of tiles to deal at the start of the game
 let MIN_WORD_LENGTH = 2; // Minimum word length allowed
 let MAX_WORD_LENGTH_FOR_SEARCH = 10; // Maximum word length allowed for search (== search-depth during dfs)
 let MIN_SCORING_WORD_LENGTH = 3; // Minimum word length to score
-let MIN_SCORING_SCORE = 10; // Minimum score to consider a word valid for scoring
-let MAX_GIVE_UPS = 1000; // Maximum number of give-ups allowed in a level
+let MIN_SCORE_FOR_REMOVAL = 10; // Minimum score to you need to achieve to remove tiles from the board
+let INITIAL_HINTS = 0; // Initial number of hints in a level
 let LENGTH_FIFTY_BONUS = 7; // Bonus for words of length 7 or more
 let LENGTH_TRIPLE_WORD_SCORE = 9; // Bonus for words of length 10 or more
 let LENGTH_5X_WORD_SCORE = 10; // Bonus for words of length 10 or more
-let TIMER_BAR_DURATION = 60_000; // Duration of the timer bar animation in milliseconds
+let TIMER_BAR_DURATION = 600_000; // Duration of the timer bar animation in milliseconds
 const LEXICON_LARGE = LEXICON95; // Use the 95 lexicon for obscure word validation
 const LEXICON_SMALL = LEXICON40; // Use the 40 lexicon for word validation
 let ALLOW_PROPER_NOUNS = false; // Whether to allow proper nouns in the game
+let INFINITE_GAME = false; // If true, tiles are recycled to the stock when the player finishes a word, otherwise the game ends when all tiles are used up
 /**
  * Retrieve the persisted reached level (defaulting to 0).
  */
@@ -956,12 +1027,12 @@ async function showOptionsPanel() : Promise<void> {
             MIN_WORD_LENGTH = parseInt(form.MIN_WORD_LENGTH.value, 10);
             MAX_WORD_LENGTH_FOR_SEARCH = parseInt(form.MAX_WORD_LENGTH_FOR_SEARCH.value, 10);
             MIN_SCORING_WORD_LENGTH = parseInt(form.MIN_SCORING_WORD_LENGTH.value, 10);
-            MIN_SCORING_SCORE = parseInt(form.MIN_SCORING_SCORE.value, 10);
-            MAX_GIVE_UPS = parseInt(form.MAX_GIVE_UPS.value, 10);
+            MIN_SCORE_FOR_REMOVAL = parseInt(form.MIN_SCORING_SCORE.value, 10);
+            INITIAL_HINTS = parseInt(form.INITIAL_HINTS.value, 10);
             LENGTH_FIFTY_BONUS = parseInt(form.LENGTH_FIFTY_BONUS.value, 10);
             LENGTH_TRIPLE_WORD_SCORE = parseInt(form.LENGTH_TRIPLE_WORD_SCORE.value, 10);
             LENGTH_5X_WORD_SCORE = parseInt(form.LENGTH_5X_WORD_SCORE.value, 10);
-            TIMER_BAR_DURATION = parseInt(form.TIMER_BAR_DURATION.value, 10);
+            TIMER_BAR_DURATION = parseInt(form.TIMER_BAR_DURATION.value, 10) * 1000; // Convert seconds to milliseconds
             panel.style.display = 'none';
             resolve();
         }
@@ -999,9 +1070,28 @@ async function showOptionsPanel() : Promise<void> {
     await showOptionsPanel();
     for (;;) {
 
-        const levelScore = await level();
+        const gameState: Model = await level();
+        let levelScore = gameState.totalScore;
+        let message = `You scored: ${levelScore}<br>`
 
-        await showModalDialog(`You scored ${levelScore}.<br> Play again?`);
+        switch (gameState.gameOverReason) {
+            case "no more plays":
+                message = "<p>No more words can be made from the remaining tiles.</p>";
+                if (gameState.penalty == 0) {
+                    levelScore += 200; // Bonus for clearing the board
+                    await playSoundEffect("excellent"); // Cleared the board, so play an excellent sound
+                    message += "+ 200 point bonus for clearing the deck!<br>";
+                } else {
+                    message += `Minus remaining tiles: ${gameState.penalty}<br>`;
+                    levelScore -= gameState.penalty; // Subtract penalty for remaining tiles
+                }
+                break;
+            case "timeout":
+                message = "Timed out! No score for you!<br>";
+                levelScore = 0;
+        }
+        message += `<br>Total score: ${levelScore}<br>`;
+        await showModalDialog(message);
     }
 
 })();

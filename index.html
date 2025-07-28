@@ -146,10 +146,12 @@
         }
 
         .stock {
-            position: absolute;
-            top: 50vw;
-            left: 50vw;
-            visibility: hidden;
+            position: relative;
+            top: 0;
+            left: 0;
+            width: calc(2 * var(--TILE_SIZE));
+            height: calc(2 * var(--TILE_SIZE));
+            /*visibility: hidden;*/
         }
 
         .deck {
@@ -169,6 +171,9 @@
 
         }
 
+        .stock .scrabble-tile {
+            position: absolute;
+        }
         #word > :not(:last-child) {
 
             opacity: .9;
@@ -337,7 +342,26 @@
             font-size: 1em;
             user-select: none;
         }
+        .hint-button {
 
+            border-radius: 25%;
+            width: calc( var(--TILE_SIZE) * 1.5 );
+            height: var(--TILE_SIZE);
+            display: flex;
+            justify-content: flex-end; /* aligns horizontally to the right */
+            align-items: flex-end;     /* aligns vertically to the bottom */
+            /*line-height: var(--TILE_SIZE);*/
+            background-image: url('assets/img/dr-johnson-01.png');
+            color: var(--text-color);
+            text-shadow: 0 0 4px red, 0 1px 8px red;
+            cursor: pointer;
+            font-size: .75em;
+
+        }
+        .hint-button::after {
+            content: attr(data-hints-left); /* Use a data-hint attribute for the value */
+
+        }
         .hidden {
             display: none;
         }
@@ -468,11 +492,11 @@
         <label>Max Word Length For Search: <input name="MAX_WORD_LENGTH_FOR_SEARCH" type="number" min="3" max="20" value="10"></label>
         <label>Min Scoring Word Length: <input name="MIN_SCORING_WORD_LENGTH" type="number" min="2" max="10" value="3"></label>
         <label>Min Scoring Score: <input name="MIN_SCORING_SCORE" type="number" min="1" max="100" value="10"></label>
-        <label>Max Give-Ups: <input name="MAX_GIVE_UPS" type="number" min="1" max="10000" value="1000"></label>
+        <label>Max Hints: <input name="INITIAL_HINTS" type="number" min="1" max="1000" value="1"></label>
         <label>Bonus (7+ letters): <input name="LENGTH_FIFTY_BONUS" type="number" min="1" max="20" value="7"></label>
         <label>Triple Word (9+): <input name="LENGTH_TRIPLE_WORD_SCORE" type="number" min="1" max="20" value="9"></label>
         <label>5x Word (10+): <input name="LENGTH_5X_WORD_SCORE" type="number" min="1" max="20" value="10"></label>
-        <label>Timer Duration (ms): <input name="TIMER_BAR_DURATION" type="number" min="5000" max="600000" value="60000"></label>
+        <label>Timer Duration (s): <input name="TIMER_BAR_DURATION" type="number" min="5" max="3600" value="600"></label>
         <button type="submit">Start Game</button>
     </form>
 </div>
